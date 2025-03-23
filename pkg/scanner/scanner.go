@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"strings"
 	"sync"
@@ -168,10 +167,25 @@ func (s *ServiceScanner) executeProbes(ctx context.Context, target *Target, prob
 		default:
 			// 继续处理
 		}
+
+		// 检查目标是否已被判定为无效
+		if target.StatusCheck.IsClose() {
+			gologger.Warning().Msgf("目标 %s:%d 已被判定为无效，终止后续探针扫描", target.IP, target.Port)
+			return target.StatusCheck.GetReason()
+		}
+		// 检查目标是否可能被防火墙阻止
+		if target.StatusCheck.IsLikelyFirewalled() {
+			return target.StatusCheck.GetReason()
+		}
 		// 执行探针
 		response, err := s.executeProbe(ctx, target, pb, options)
-		if err != nil && len(response) == 0 {
-			gologger.Warning().Msgf("Failed to execute probe %s on %s:%d: %v", pb.Name, target.IP, target.Port, err)
+		if err != nil {
+			// 使用 HandleError 方法统一处理错误
+			shouldTerminate, _ := target.StatusCheck.HandleError(err, target)
+			if shouldTerminate {
+				return target.StatusCheck.GetReason()
+			}
+			// 继续尝试下一个探针
 			continue
 		}
 		if s.defaultOptions.DebugResponse {
@@ -188,7 +202,7 @@ func (s *ServiceScanner) executeProbes(ctx context.Context, target *Target, prob
 		}
 	}
 	// 如果没有匹配到任何服务
-	return errors.New("no service matched")
+	return ErrNotMatched
 }
 
 // executeProbe 执行单个探针
@@ -197,18 +211,24 @@ func (s *ServiceScanner) executeProbe(ctx context.Context, target *Target, probe
 	timeoutCtx, cancel := context.WithTimeout(ctx, options.Timeout)
 	defer cancel()
 
-	// 自动检测是否需要SSL
-	useSSL := false
 	if options.DebugRequest {
-		gologger.Debug().Msgf("Sending probe %s to %s:%d ssl: %t", probe.Name, target.IP, target.Port, useSSL)
+		gologger.Debug().Msgf("Sending probe %s to %s:%d", probe.Name, target.IP, target.Port)
 	}
 
 	// 创建连接
 	conn, err := s.createConnection(timeoutCtx, target, options.Timeout)
 	if err != nil {
-		return nil, err
+		// 使用 HandleError 方法统一处理错误
+		shouldTerminate, wrappedErr := target.StatusCheck.HandleError(err, target)
+		if shouldTerminate {
+			return nil, wrappedErr
+		}
+		return nil, wrappedErr
 	}
 	defer conn.Close()
+
+	// 连接成功，更新状态检查器
+	target.StatusCheck.SetOpen()
 
 	// 设置读写超时
 	_ = conn.SetDeadline(time.Now().Add(options.Timeout))
@@ -216,11 +236,28 @@ func (s *ServiceScanner) executeProbe(ctx context.Context, target *Target, probe
 	_, err = conn.Write(probe.SendData)
 	if err != nil {
 		gologger.Debug().Msgf("发送探针数据到 %s:%d 失败: %v", target.IP, target.Port, err)
-		return nil, err
+		// 使用 HandleError 方法统一处理错误
+		shouldTerminate, wrappedErr := target.StatusCheck.HandleError(err, target)
+		if shouldTerminate {
+			return nil, wrappedErr
+		}
+		return nil, wrappedErr
 	}
 
 	// 读取响应
-	return s.readResponse(conn, options)
+	response, err := s.readResponse(conn, options)
+	if len(response) > 0 {
+		target.StatusCheck.SetReadOK()
+	}
+	if err != nil {
+		// 使用 HandleError 方法统一处理错误
+		shouldTerminate, wrappedErr := target.StatusCheck.HandleError(err, target)
+		if shouldTerminate {
+			return response, wrappedErr
+		}
+		return response, wrappedErr
+	}
+	return response, nil
 }
 
 // createConnection 创建网络连接
@@ -228,7 +265,6 @@ func (s *ServiceScanner) createConnection(ctx context.Context, target *Target, t
 	dialer := &net.Dialer{
 		Timeout: timeout,
 	}
-
 	if target.Protocol == TCP {
 		return dialer.DialContext(ctx, "tcp", fmt.Sprintf("%s:%d", target.IP, target.Port))
 	} else if target.Protocol == UDP {
@@ -253,7 +289,7 @@ func (s *ServiceScanner) readResponse(conn net.Conn, options *ScanOptions) ([]by
 				return responseData, nil
 			}
 			// 否则返回超时错误
-			return responseData, fmt.Errorf("read timeout")
+			return responseData, fmt.Errorf("max read timeout")
 		}
 
 		// 设置单次读取超时
@@ -265,7 +301,6 @@ func (s *ServiceScanner) readResponse(conn net.Conn, options *ScanOptions) ([]by
 
 		// 读取数据
 		n, err := conn.Read(buffer)
-
 		// 如果读取到数据，追加到响应中
 		if n > 0 {
 			responseData = append(responseData, buffer[:n]...)
@@ -282,25 +317,7 @@ func (s *ServiceScanner) readResponse(conn net.Conn, options *ScanOptions) ([]by
 
 		// 处理错误
 		if err != nil {
-			// 如果是超时错误，但已经读取到数据，则返回已读取的数据
-			var netErr net.Error
-			if errors.As(err, &netErr) && netErr.Timeout() {
-				if len(responseData) > 0 {
-					break
-				}
-				// 如果没有读取到数据，继续尝试
-				continue
-			} else if errors.Is(err, io.EOF) {
-				// EOF表示连接已关闭，数据读取完毕
-				break
-			} else {
-				// 其他错误，如果已读取数据则返回数据，否则返回错误
-				if len(responseData) > 0 {
-					gologger.Debug().Msgf("读取过程中发生错误，但已获取部分数据: %v", err)
-					break
-				}
-				return nil, err
-			}
+			err = ErrReadTimeout
 		}
 	}
 	return responseData, nil

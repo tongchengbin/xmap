@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"github.com/projectdiscovery/gologger"
 	"github.com/projectdiscovery/gologger/levels"
-	"github.com/tongchengbin/xmap/internal/scanner"
+	"github.com/tongchengbin/xmap/pkg/scanner"
 	"net"
 	"testing"
 	"time"

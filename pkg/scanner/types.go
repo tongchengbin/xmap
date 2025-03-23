@@ -24,22 +24,22 @@ type Target struct {
 	Port int
 	// 协议
 	Protocol Protocol
-	// 是否使用SSL
-	UseSSL bool
+	// 状态检查器，用于跟踪连接状态
+	StatusCheck *PortStatusCheck
 }
 
 // NewTarget 创建新的扫描目标
-func NewTarget(ip string, port int, protocol Protocol, useSSL bool) *Target {
+func NewTarget(ip string, port int, protocol Protocol) *Target {
 	return &Target{
-		IP:       ip,
-		Port:     port,
-		Protocol: protocol,
-		UseSSL:   useSSL,
+		IP:          ip,
+		Port:        port,
+		Protocol:    protocol,
+		StatusCheck: &PortStatusCheck{},
 	}
 }
 
 // ParseTarget 解析目标字符串，格式为 ip:port 或 ip:port/protocol
-func ParseTarget(target string, defaultProtocol Protocol, useSSL bool) (*Target, error) {
+func ParseTarget(target string, defaultProtocol Protocol) (*Target, error) {
 	host, port, err := net.SplitHostPort(target)
 	if err != nil {
 		return nil, err
@@ -50,8 +50,21 @@ func ParseTarget(target string, defaultProtocol Protocol, useSSL bool) (*Target,
 		return nil, err
 	}
 
-	return NewTarget(host, portInt, defaultProtocol, useSSL), nil
+	return NewTarget(host, portInt, defaultProtocol), nil
 }
+
+// ScanStatus 扫描结果状态
+type ScanStatus int
+
+const (
+	StatusUnknown ScanStatus = iota
+	StatusMatched
+	StatusNoMatch
+	StatusError
+	StatusClosed
+	StatusInvalid    // 无效目标（如连续多次连接失败）
+	StatusFirewalled // 可能被防火墙阻止
+)
 
 // ScanResult 表示扫描结果
 type ScanResult struct {
@@ -72,6 +85,8 @@ type ScanResult struct {
 	Duration float64
 	// 错误信息
 	Error error
+	// 扫描状态
+	Status ScanStatus
 
 	startTime time.Time
 	endTime   time.Time
@@ -82,6 +97,7 @@ func NewScanResult(target *Target) *ScanResult {
 	return &ScanResult{
 		Target:    target,
 		startTime: time.Now(),
+		Status:    StatusUnknown,
 	}
 }
 
@@ -90,6 +106,19 @@ func (r *ScanResult) Complete(err error) {
 	r.Error = err
 	r.endTime = time.Now()
 	r.Duration = r.endTime.Sub(r.startTime).Seconds()
+
+	// 根据错误类型设置状态
+	if err != nil {
+		if err.Error() == "invalid target" {
+			r.Status = StatusInvalid
+		} else {
+			r.Status = StatusError
+		}
+	} else if r.Service != "" {
+		r.Status = StatusMatched
+	} else {
+		r.Status = StatusNoMatch
+	}
 }
 
 // SetMatchResult 设置匹配结果

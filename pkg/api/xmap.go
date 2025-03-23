@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"github.com/tongchengbin/xmap/pkg/scanner"
 	"sync"
 	"time"
 
 	"github.com/projectdiscovery/gologger"
-	"github.com/tongchengbin/xmap/internal/scanner"
 	"github.com/tongchengbin/xmap/pkg/model"
 	"github.com/tongchengbin/xmap/pkg/probe"
 )
@@ -126,11 +126,7 @@ func WithVerbose(verbose bool) Option {
 // Scan 扫描单个目标
 func (x *XMap) Scan(ctx context.Context, target *model.ScanTarget) (*model.ScanResult, error) {
 	// 转换目标
-	scanTarget := &scanner.Target{
-		IP:       target.IP,
-		Port:     target.Port,
-		Protocol: scanner.Protocol(target.Protocol),
-	}
+	scanTarget := scanner.NewTarget(target.IP, target.Port, scanner.Protocol(target.Protocol))
 
 	// 创建扫描选项
 	scanOptions := x.createScanOptions(nil)
@@ -400,7 +396,7 @@ func (x *XMap) convertResult(result *scanner.ScanResult, target *model.ScanTarge
 	if result == nil {
 		return &model.ScanResult{
 			Target:    target,
-			Error:     "scan result is nil",
+			Error:     "",
 			StartTime: time.Now(),
 			EndTime:   time.Now(),
 		}
