@@ -123,11 +123,18 @@ func WithVerbose(verbose bool) Option {
 	}
 }
 
+func showApplyWebScan(result *scanner.ScanResult) bool {
+	if result.Service == "http" || result.Service == "https" {
+		println("apply web scan")
+		return true
+	}
+	return false
+}
+
 // Scan 扫描单个目标
 func (x *XMap) Scan(ctx context.Context, target *model.ScanTarget) (*model.ScanResult, error) {
 	// 转换目标
 	scanTarget := scanner.NewTarget(target.IP, target.Port, scanner.Protocol(target.Protocol))
-
 	// 创建扫描选项
 	scanOptions := x.createScanOptions(nil)
 	// 执行扫描
@@ -138,8 +145,12 @@ func (x *XMap) Scan(ctx context.Context, target *model.ScanTarget) (*model.ScanR
 			Error:  err.Error(),
 		}, err
 	}
-	// 转换结果
-	return x.convertResult(result, target), nil
+	if showApplyWebScan(result) {
+		return x.convertResult(result, target), nil
+	} else {
+		return x.convertResult(result, target), nil
+	}
+
 }
 
 // BatchScan 批量扫描多个目标
@@ -405,17 +416,16 @@ func (x *XMap) convertResult(result *scanner.ScanResult, target *model.ScanTarge
 		Hostname:       result.Hostname,
 		MatchedProbe:   result.MatchedProbe,
 		MatchedPattern: result.MatchedPattern,
-		Components: []map[string]interface{}{
-			result.Extra,
-		},
-		Duration: result.Duration,
+		Components:     []map[string]interface{}{},
+		Duration:       result.Duration,
 	}
-
+	if result.Extra != nil {
+		modelResult.Components = append(modelResult.Components, result.Extra)
+	}
 	// 设置错误信息
 	if result.Error != nil {
 		modelResult.Error = result.Error.Error()
 	}
-
 	// 设置原始响应数据
 	if result.RawResponse != nil && len(result.RawResponse) > 0 {
 		modelResult.RawResponse = base64.StdEncoding.EncodeToString(result.RawResponse)
