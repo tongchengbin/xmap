@@ -7,6 +7,8 @@ import (
 
 // ScanTarget 表示扫描目标
 type ScanTarget struct {
+	// 目标ID
+	ID string `json:"id,omitempty"`
 	// IP地址
 	IP string `json:"ip"`
 	// 端口
@@ -27,10 +29,6 @@ type ScanResult struct {
 	Components []map[string]interface{} `json:"components,omitempty"`
 	// 主机名
 	Hostname string `json:"hostname,omitempty"`
-	// 操作系统
-	OS string `json:"os,omitempty"`
-	// 设备类型
-	DeviceType string `json:"device_type,omitempty"`
 	// 匹配的探针名称
 	MatchedProbe string `json:"matched_probe,omitempty"`
 	// 匹配的服务名称
@@ -41,9 +39,7 @@ type ScanResult struct {
 	Duration float64 `json:"duration"`
 	// 错误信息
 	Error string `json:"error,omitempty"`
-	// 原始响应数据的Base64编码
-	RawResponse string `json:"raw_response,omitempty"`
-	// 自定义元数据
+	// 自定义元数据，http banner,tcp banner
 	Metadata map[string]interface{} `json:"metadata,omitempty"`
 }
 

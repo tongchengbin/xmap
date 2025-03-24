@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"github.com/tongchengbin/appfinger/pkg/external/customrules"
 	"github.com/tongchengbin/xmap/pkg/scanner"
 	"sync"
 	"time"
@@ -11,14 +12,17 @@ import (
 	"github.com/projectdiscovery/gologger"
 	"github.com/tongchengbin/xmap/pkg/model"
 	"github.com/tongchengbin/xmap/pkg/probe"
+	"github.com/tongchengbin/xmap/pkg/web"
 )
 
 // XMap 是公共API接口，用于与外部系统集成
 type XMap struct {
-	// 指纹管理器
-	probeManager *probe.Manager
 	// 扫描器
 	scanner *scanner.ServiceScanner
+	// Web扫描器
+	webScanner *web.Scanner
+	// 指纹管理器
+	probeManager *probe.Manager
 	// 默认选项
 	defaultOptions *scanner.ScanOptions
 	// 初始化锁
@@ -27,19 +31,19 @@ type XMap struct {
 
 // NewXMap 创建新的XMap实例
 func NewXMap(options ...Option) *XMap {
-
-	xmap := &XMap{
+	// 创建XMap实例
+	x := &XMap{
 		defaultOptions: scanner.DefaultScanOptions(),
 	}
 	// 应用选项
 	for _, option := range options {
-		option(xmap)
+		option(x)
 	}
 
 	// 延迟初始化
-	xmap.init()
+	x.init()
 
-	return xmap
+	return x
 }
 
 // init 初始化XMap
@@ -48,19 +52,49 @@ func (x *XMap) init() {
 		// 初始化默认管理器（如果尚未初始化）
 		err := probe.InitDefaultManager()
 		if err != nil {
-			gologger.Error().Msgf("初始化默认指纹管理器失败: %v", err)
+			gologger.Error().Msgf("初始化默认管理器失败: %v", err)
+			return
 		}
-		// 创建扫描器
-		scannerOptions := []scanner.ScanOption{
+
+		// 获取指纹管理器
+		x.probeManager, err = probe.GetManager(&probe.FingerprintOptions{
+			VersionIntensity: x.defaultOptions.VersionIntensity,
+		})
+		if err != nil {
+			gologger.Error().Msgf("获取指纹管理器失败: %v", err)
+			return
+		}
+		// 创建服务扫描器
+		x.scanner, err = scanner.NewServiceScanner(
 			scanner.WithVersionIntensity(x.defaultOptions.VersionIntensity),
 			scanner.WithTimeout(x.defaultOptions.Timeout),
 			scanner.WithRetries(x.defaultOptions.Retries),
+			scanner.WithMaxParallelism(x.defaultOptions.MaxParallelism),
 			scanner.WithFastMode(x.defaultOptions.FastMode),
 			scanner.WithDebugRequest(x.defaultOptions.DebugRequest),
 			scanner.WithDebugResponse(x.defaultOptions.DebugResponse),
-			scanner.WithVerbose(x.defaultOptions.Verbose),
+		)
+		if err != nil {
+			gologger.Error().Msgf("创建服务扫描器失败: %v", err)
+			return
 		}
-		x.scanner, _ = scanner.NewServiceScanner(scannerOptions...)
+		// 初始化规则库
+		err = InitRuleManager(customrules.GetDefaultDirectory())
+		if err != nil {
+			gologger.Warning().Msgf("初始化规则库失败: %v", err)
+			// 即使规则库初始化失败，也不影响基本功能
+		}
+
+		// 创建Web扫描器
+		x.webScanner, err = web.NewScanner()
+		if err != nil {
+			gologger.Warning().Msgf("创建Web扫描器失败: %v", err)
+			// 即使Web扫描器创建失败，也不影响基本功能
+		} else {
+			// 设置Web扫描器选项
+			x.webScanner.SetTimeout(time.Duration(x.defaultOptions.Timeout) * time.Second)
+			x.webScanner.SetDebugResponse(x.defaultOptions.DebugResponse)
+		}
 	})
 }
 
@@ -123,20 +157,18 @@ func WithVerbose(verbose bool) Option {
 	}
 }
 
-func showApplyWebScan(result *scanner.ScanResult) bool {
-	if result.Service == "http" || result.Service == "https" {
-		println("apply web scan")
-		return true
-	}
-	return false
-}
-
 // Scan 扫描单个目标
-func (x *XMap) Scan(ctx context.Context, target *model.ScanTarget) (*model.ScanResult, error) {
+func (x *XMap) Scan(ctx context.Context, target *model.ScanTarget, options ...*model.ScanOptions) (*model.ScanResult, error) {
 	// 转换目标
 	scanTarget := scanner.NewTarget(target.IP, target.Port, scanner.Protocol(target.Protocol))
+
 	// 创建扫描选项
-	scanOptions := x.createScanOptions(nil)
+	var opts *model.ScanOptions
+	if len(options) > 0 && options[0] != nil {
+		opts = options[0]
+	}
+	scanOptions := x.createScanOptions(opts)
+
 	// 执行扫描
 	result, err := x.scanner.ScanWithContext(ctx, scanTarget, scanOptions...)
 	if result == nil && err != nil {
@@ -145,12 +177,25 @@ func (x *XMap) Scan(ctx context.Context, target *model.ScanTarget) (*model.ScanR
 			Error:  err.Error(),
 		}, err
 	}
-	if showApplyWebScan(result) {
-		return x.convertResult(result, target), nil
-	} else {
-		return x.convertResult(result, target), nil
+
+	// 转换基本结果
+	modelResult := x.convertResult(result, target)
+
+	// 检查是否需要进行Web扫描
+	if result != nil && web.ShouldScan(result.Service) {
+		gologger.Debug().Msgf("Discovered web service %s,applying web scan %s:%d", target.IP, target.Port)
+		// 执行Web扫描
+		webResult, webErr := x.webScanner.ScanWithContext(ctx, scanTarget)
+		if webErr != nil {
+			gologger.Warning().Msgf("Web扫描失败: %v", webErr)
+		} else if webResult != nil {
+			// 将Web扫描结果添加到模型结果中
+			x.enrichResultWithWebData(modelResult, webResult)
+			gologger.Debug().Msgf("Webscan for %s:%d，Found %d Components", target.IP, target.Port, len(webResult.Components))
+		}
 	}
 
+	return modelResult, nil
 }
 
 // BatchScan 批量扫描多个目标
@@ -158,11 +203,7 @@ func (x *XMap) BatchScan(ctx context.Context, targets []*model.ScanTarget, optio
 	// 转换目标
 	scanTargets := make([]*scanner.Target, len(targets))
 	for i, target := range targets {
-		scanTargets[i] = &scanner.Target{
-			IP:       target.IP,
-			Port:     target.Port,
-			Protocol: scanner.Protocol(target.Protocol),
-		}
+		scanTargets[i] = scanner.NewTarget(target.IP, target.Port, scanner.Protocol(target.Protocol))
 	}
 
 	// 创建扫描选项
@@ -178,6 +219,21 @@ func (x *XMap) BatchScan(ctx context.Context, targets []*model.ScanTarget, optio
 	modelResults := make([]*model.ScanResult, len(results))
 	for i, result := range results {
 		modelResults[i] = x.convertResult(result, targets[i])
+
+		// 检查是否需要进行Web扫描
+		if web.ShouldScan(result.Service) {
+			gologger.Debug().Msgf("检测到HTTP服务，执行Web扫描: %s:%d", targets[i].IP, targets[i].Port)
+
+			// 执行Web扫描
+			webResult, webErr := x.webScanner.ScanWithContext(ctx, scanTargets[i])
+			if webErr != nil {
+				gologger.Warning().Msgf("Web扫描失败: %v", webErr)
+			} else if webResult != nil {
+				// 将Web扫描结果添加到模型结果中
+				x.enrichResultWithWebData(modelResults[i], webResult)
+				gologger.Debug().Msgf("Web扫描成功，发现 %d 个指纹", len(webResult.Components))
+			}
+		}
 	}
 
 	return modelResults, nil
@@ -252,7 +308,7 @@ func (x *XMap) ExecuteTaskWithProgress(ctx context.Context, task *model.ScanTask
 			defer func() { <-sem }()
 
 			// 执行扫描
-			result, err := x.Scan(scanCtx, t)
+			result, err := x.Scan(scanCtx, t, task.Options)
 			if err != nil {
 				gologger.Debug().Msgf("Failed to scan target %s:%d: %v", t.IP, t.Port, err)
 			}
@@ -401,34 +457,101 @@ func (x *XMap) createScanOptions(options *model.ScanOptions) []scanner.ScanOptio
 	return scanOptions
 }
 
+// enrichResultWithWebData 使用Web扫描数据丰富扫描结果
+func (x *XMap) enrichResultWithWebData(result *model.ScanResult, webResult *web.ScanResult) {
+	if result == nil || webResult == nil {
+		return
+	}
+	// 确保Metadata已初始化
+	if result.Metadata == nil {
+		result.Metadata = make(map[string]interface{})
+	}
+	// 添加Banner信息到Metadata
+	if webResult.Banner != nil {
+		// 添加标题
+		if webResult.Banner.Title != "" {
+			result.Metadata["title"] = webResult.Banner.Title
+		}
+		// 添加状态码
+		if webResult.Banner.StatusCode > 0 {
+			result.Metadata["status_code"] = webResult.Banner.StatusCode
+		}
+		// 如果有HTTP响应体，添加到Metadata
+		if webResult.Banner.Body != "" {
+			result.Metadata["body"] = webResult.Banner.Body
+		}
+		if webResult.Banner.IconBytes != nil {
+			result.Metadata["icon"] = base64.StdEncoding.EncodeToString(webResult.Banner.IconBytes)
+		}
+		if webResult.Banner.Certificate != "" {
+			result.Metadata["certificate"] = webResult.Banner.Certificate
+		}
+		if webResult.Banner.Charset != "" {
+			result.Metadata["charset"] = webResult.Banner.Charset
+		}
+		if webResult.Banner.Header != "" {
+			result.Metadata["header"] = webResult.Banner.Header
+		}
+		if webResult.Banner.IconType != "" {
+			result.Metadata["icon_type"] = webResult.Banner.IconType
+		}
+		if webResult.Banner.IconHash > 0 {
+			result.Metadata["icon_hash"] = webResult.Banner.IconHash
+		}
+		if webResult.Banner.BodyHash > 0 {
+
+		}
+	}
+	// 添加指纹信息
+	if len(webResult.Components) > 0 {
+		for name, ext := range webResult.Components {
+			// 创建新的map[string]interface{}
+			componentInfo := make(map[string]interface{})
+			componentInfo["name"] = name
+
+			// 复制其他属性
+			for k, v := range ext {
+				componentInfo[k] = v
+			}
+
+			result.Components = append(result.Components, componentInfo)
+		}
+	}
+}
+
 // convertResult 转换扫描结果
 func (x *XMap) convertResult(result *scanner.ScanResult, target *model.ScanTarget) *model.ScanResult {
 	if result == nil {
-		return &model.ScanResult{
-			Target: target,
-			Error:  "",
-		}
+		return nil
 	}
+
 	// 创建模型结果
 	modelResult := &model.ScanResult{
-		Target:         target,
-		Service:        result.Service,
-		Hostname:       result.Hostname,
-		MatchedProbe:   result.MatchedProbe,
-		MatchedPattern: result.MatchedPattern,
-		Components:     []map[string]interface{}{},
-		Duration:       result.Duration,
+		Target: &model.ScanTarget{
+			IP:       target.IP,
+			Port:     target.Port,
+			Protocol: target.Protocol,
+		},
+		Service:      result.Service,
+		MatchedProbe: result.MatchedProbe,
+		Components:   []map[string]interface{}{},
+		Duration:     result.Duration,
+		Metadata:     make(map[string]interface{}),
 	}
-	if result.Extra != nil {
+
+	if result.Extra != nil && len(result.Extra) > 0 {
 		modelResult.Components = append(modelResult.Components, result.Extra)
 	}
+
 	// 设置错误信息
 	if result.Error != nil {
 		modelResult.Error = result.Error.Error()
 	}
+
 	// 设置原始响应数据
 	if result.RawResponse != nil && len(result.RawResponse) > 0 {
-		modelResult.RawResponse = base64.StdEncoding.EncodeToString(result.RawResponse)
+		modelResult.Metadata["tcp_banner"] = base64.StdEncoding.EncodeToString(result.RawResponse)
 	}
+
 	return modelResult
 }

@@ -223,17 +223,6 @@ func main() {
 	gologger.Info().Msgf("扫描完成，耗时: %s", time.Since(startTime))
 	gologger.Info().Msgf("扫描结果: 总计 %d 个目标，发现 %d 个服务", len(targets), countServices(results))
 
-	// 输出详细结果
-	if !*silentFlag {
-		if *jsonFlag {
-			printResultsJSON(results)
-		} else if *csvFlag {
-			printResultsCSV(results)
-		} else {
-			printResults(results)
-		}
-	}
-
 	// 保存结果到文件
 	if *outputFlag != "" {
 		var format string
@@ -441,13 +430,10 @@ func printResults(results []*model.ScanResult) {
 	fmt.Println("-------------------------------------------------------------------------------------------------------------------")
 
 	for _, result := range results {
-		fmt.Printf("%-20s %-10d %-15s %-15s %-15s %-20s\n",
+		fmt.Printf("%-20s %-10d %-15s %-15s %-20s\n",
 			result.Target.IP,
 			result.Target.Port,
 			truncateString(result.Service, 15),
-			truncateString(result.ProductName, 15),
-			truncateString(result.Version, 15),
-			truncateString(result.Info, 20),
 		)
 	}
 	fmt.Println("-------------------------------------------------------------------------------------------------------------------")
@@ -461,10 +447,6 @@ func printResultsJSON(results []*model.ScanResult) {
     "target": "%s:%d",
     "protocol": "%s",
     "service": "%s",
-    "product": "%s",
-    "version": "%s",
-    "os": "%s",
-    "info": "%s",
     "matched_probe": "%s",
     "duration": "%s"
   }`,
@@ -472,10 +454,6 @@ func printResultsJSON(results []*model.ScanResult) {
 			result.Target.Port,
 			result.Target.Protocol,
 			result.Service,
-			result.ProductName,
-			result.Version,
-			result.OS,
-			result.Info,
 			result.MatchedProbe,
 			result.Duration,
 		)
@@ -487,24 +465,6 @@ func printResultsJSON(results []*model.ScanResult) {
 		}
 	}
 	fmt.Println("]")
-}
-
-// 打印CSV格式结果
-func printResultsCSV(results []*model.ScanResult) {
-	// 打印CSV头
-	fmt.Println("IP,Port,Protocol,Service,Version,Banner")
-
-	for _, result := range results {
-		ip := result.Target.IP
-		port := result.Target.Port
-		protocol := result.Target.Protocol
-		service := result.Service
-		version := result.Version
-		info := strings.ReplaceAll(truncateString(result.Info, 50), "\n", " ")
-
-		fmt.Printf("%s,%d,%s,%s,%s,%s\n",
-			ip, port, protocol, service, version, info)
-	}
 }
 
 // 保存结果到文件
@@ -523,7 +483,6 @@ func saveResults(results []*model.ScanResult, filename string, format string) er
 	case "json":
 		printResultsJSON(results)
 	case "csv":
-		printResultsCSV(results)
 	default:
 		printResults(results)
 	}

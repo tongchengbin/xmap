@@ -127,9 +127,6 @@ func readTargetsFile(filename string) ([]*model.ScanTarget, error) {
 			continue
 		}
 
-		// 判断是否使用SSL
-		useSSL := port == 443 || port == 8443
-
 		// 创建目标
 		target := &model.ScanTarget{
 			IP:       ip,
@@ -212,16 +209,11 @@ func saveResultsToFile(results []*model.ScanResult, filename string) {
 
 	// 写入结果
 	for _, result := range results {
-		line := fmt.Sprintf("%s,%d,%s,%s,%s,%s,%s,%s,%s,%s,%s\n",
+		line := fmt.Sprintf("%s,%d,%s,%s,%s,%s\n",
 			result.Target.IP,
 			result.Target.Port,
 			result.Target.Protocol,
 			result.Service,
-			result.ProductName,
-			result.Version,
-			result.OS,
-			result.DeviceType,
-			strings.ReplaceAll(result.Info, ",", " "), // 避免CSV格式问题
 			result.MatchedProbe,
 			result.Duration,
 		)

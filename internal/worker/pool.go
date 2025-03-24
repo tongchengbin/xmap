@@ -5,8 +5,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/projectdiscovery/gologger"
 )
 
 // Task 表示工作任务接口

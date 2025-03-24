@@ -293,14 +293,6 @@ func demonstrateErrorHandling(ctx context.Context, xmap *api.XMap) {
 		ID:       "invalid-target",
 	}
 
-	// 创建一个超时非常短的选项
-	shortTimeoutOptions := &model.ScanOptions{
-		Timeout:          1, // 1秒超时
-		Retries:          0, // 不重试
-		VersionIntensity: 5,
-		FastMode:         true,
-	}
-
 	// 4.1 处理无效目标
 	fmt.Println("4.1 处理无效目标")
 	result, err := xmap.Scan(ctx, invalidTarget, nil)
@@ -319,13 +311,21 @@ func demonstrateErrorHandling(ctx context.Context, xmap *api.XMap) {
 		ID:       "timeout-target",
 	}
 
-	result, err = xmap.Scan(ctx, timeoutTarget)
-	if err != nil {
-		fmt.Printf("扫描超时（预期行为）: %v\n", err)
-	} else if result.Error != "" {
-		fmt.Printf("扫描完成，但有错误: %s\n", result.Error)
+	// 使用短超时选项
+	shortTimeoutOptions := &model.ScanOptions{
+		Timeout:          1, // 1秒超时
+		Retries:          0, // 不重试
+		VersionIntensity: 5,
+		FastMode:         true,
+	}
+
+	// 使用短超时选项执行扫描
+	fmt.Println("使用短超时选项执行扫描...")
+	timeoutResult, timeoutErr := xmap.Scan(ctx, timeoutTarget, shortTimeoutOptions)
+	if timeoutErr != nil {
+		fmt.Printf("扫描超时（预期行为）: %v\n", timeoutErr)
 	} else {
-		fmt.Printf("扫描成功（意外）: %s\n", result.Service)
+		fmt.Printf("扫描完成，但可能有错误: %s\n", timeoutResult.Error)
 	}
 
 	// 4.3 使用重试机制

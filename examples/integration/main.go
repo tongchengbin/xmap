@@ -44,27 +44,17 @@ func main() {
 
 // 单个目标扫描示例
 func singleScanExample(xmapInstance *api.XMap) {
-	// 创建扫描目标
+	// 创建目标
 	target := &model.ScanTarget{
-		IP:       "example.com",
+		IP:       "192.168.1.1",
 		Port:     80,
 		Protocol: "TCP",
 		ID:       "target-001",
 	}
 
-	// 创建扫描选项
-	options := &model.ScanOptions{
-		Timeout:          5,
-		Retries:          2,
-		VersionIntensity: 7,
-		FastMode:         true,
-	}
-
 	// 执行扫描
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	result, err := xmapInstance.Scan(ctx, target)
+	fmt.Println("开始单个目标扫描...")
+	result, err := xmapInstance.Scan(context.Background(), target)
 	if err != nil {
 		fmt.Printf("扫描失败: %v\n", err)
 		return
@@ -92,20 +82,11 @@ func batchScanExample(xmapInstance *api.XMap) {
 		},
 	}
 
-	// 创建扫描选项
-	options := &model.ScanOptions{
-		Timeout:          5,
-		Retries:          2,
-		VersionIntensity: 7,
-		FastMode:         true,
-		MaxParallelism:   10,
-	}
-
 	// 执行批量扫描
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	results, err := xmapInstance.BatchScan(ctx, targets, options)
+	results, err := xmapInstance.BatchScan(ctx, targets, nil)
 	if err != nil {
 		fmt.Printf("批量扫描失败: %v\n", err)
 		return
@@ -326,15 +307,7 @@ func createMockScanTask() *RiskScheduleScanTask {
 func printResult(result *model.ScanResult) {
 	fmt.Printf("目标: %s:%d\n", result.Target.IP, result.Target.Port)
 	fmt.Printf("服务: %s\n", result.Service)
-	if result.ProductName != "" {
-		fmt.Printf("产品: %s\n", result.ProductName)
-	}
-	if result.Version != "" {
-		fmt.Printf("版本: %s\n", result.Version)
-	}
-	if result.OS != "" {
-		fmt.Printf("操作系统: %s\n", result.OS)
-	}
+
 	fmt.Printf("扫描耗时: %s\n", result.Duration)
 	if result.Error != "" {
 		fmt.Printf("错误: %s\n", result.Error)

@@ -98,28 +98,8 @@ func printResult(result *model.ScanResult) {
 		fmt.Printf("服务:     %s\n", result.Service)
 	}
 
-	if result.ProductName != "" {
-		fmt.Printf("产品:     %s\n", result.ProductName)
-	}
-
-	if result.Version != "" {
-		fmt.Printf("版本:     %s\n", result.Version)
-	}
-
-	if result.OS != "" {
-		fmt.Printf("操作系统: %s\n", result.OS)
-	}
-
-	if result.DeviceType != "" {
-		fmt.Printf("设备类型: %s\n", result.DeviceType)
-	}
-
 	if result.Hostname != "" {
 		fmt.Printf("主机名:   %s\n", result.Hostname)
-	}
-
-	if result.Info != "" {
-		fmt.Printf("信息:     %s\n", result.Info)
 	}
 
 	if result.MatchedProbe != "" {
