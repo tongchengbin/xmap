@@ -61,11 +61,8 @@ func (s *ServiceScanner) BatchScan(targets []*Target, options ...ScanOption) ([]
 func (s *ServiceScanner) ScanWithContext(ctx context.Context, target *Target, options ...ScanOption) (*ScanResult, error) {
 	// 创建扫描选项
 	scanOptions := s.createScanOptions(options)
-
 	// 创建扫描结果
-
 	result := NewScanResult(target)
-
 	// 选择适用的探针
 	var probes []*probe.Probe
 	if target.Protocol == TCP {
@@ -79,10 +76,8 @@ func (s *ServiceScanner) ScanWithContext(ctx context.Context, target *Target, op
 		result.Complete(err)
 		return result, err
 	}
-
 	// 对探针进行排序，优先使用适合当前端口的探针
 	probes = sortProbes(probes, target.Port, false)
-
 	// 执行扫描
 	err := s.executeProbes(ctx, target, probes, result, scanOptions)
 	result.Complete(err)

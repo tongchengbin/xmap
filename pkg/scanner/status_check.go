@@ -84,7 +84,7 @@ func (p *PortStatusCheck) HandleError(err error, target *Target) (bool, error) {
 	case ErrorTypePortClosed:
 		p.SetClose("refused")
 		// 对于明确拒绝的连接，可以更快地判定为无效目标
-		return true, ErrPortClosed
+		return true, p.reason
 	case ErrorTypeReadTimeout:
 		p.ReadTimeout++
 		p.SetClose("read_timeout")
@@ -105,7 +105,7 @@ func (p *PortStatusCheck) HandleError(err error, target *Target) (bool, error) {
 
 	// 检查是否应该终止扫描
 	if p.IsClose() {
-		return true, ErrPortClosed
+		return true, p.reason
 	}
 	return false, specificErr
 }

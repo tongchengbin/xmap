@@ -37,12 +37,8 @@ type ScanResult struct {
 	MatchedService string `json:"matched_service,omitempty"`
 	// 匹配的正则表达式
 	MatchedPattern string `json:"matched_pattern,omitempty"`
-	// 扫描开始时间
-	StartTime time.Time `json:"start_time"`
-	// 扫描结束时间
-	EndTime time.Time `json:"end_time"`
 	// 扫描耗时
-	Duration time.Duration `json:"duration"`
+	Duration float64 `json:"duration"`
 	// 错误信息
 	Error string `json:"error,omitempty"`
 	// 原始响应数据的Base64编码

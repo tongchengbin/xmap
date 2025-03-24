@@ -398,6 +398,7 @@ func TestTimeoutScan(t *testing.T) {
 		Port:     server.GetPort(),
 		Protocol: string(scanner.TCP),
 	})
+	println(result.JSON())
 	assert.NoError(t, err, "扫描失败")
 
 	// 打印扫描结果

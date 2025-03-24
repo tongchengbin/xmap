@@ -132,13 +132,12 @@ func (x *XMap) Scan(ctx context.Context, target *model.ScanTarget) (*model.ScanR
 	scanOptions := x.createScanOptions(nil)
 	// 执行扫描
 	result, err := x.scanner.ScanWithContext(ctx, scanTarget, scanOptions...)
-	if err != nil {
+	if result == nil && err != nil {
 		return &model.ScanResult{
 			Target: target,
 			Error:  err.Error(),
 		}, err
 	}
-
 	// 转换结果
 	return x.convertResult(result, target), nil
 }
@@ -395,13 +394,10 @@ func (x *XMap) createScanOptions(options *model.ScanOptions) []scanner.ScanOptio
 func (x *XMap) convertResult(result *scanner.ScanResult, target *model.ScanTarget) *model.ScanResult {
 	if result == nil {
 		return &model.ScanResult{
-			Target:    target,
-			Error:     "",
-			StartTime: time.Now(),
-			EndTime:   time.Now(),
+			Target: target,
+			Error:  "",
 		}
 	}
-
 	// 创建模型结果
 	modelResult := &model.ScanResult{
 		Target:         target,
@@ -412,6 +408,7 @@ func (x *XMap) convertResult(result *scanner.ScanResult, target *model.ScanTarge
 		Components: []map[string]interface{}{
 			result.Extra,
 		},
+		Duration: result.Duration,
 	}
 
 	// 设置错误信息
