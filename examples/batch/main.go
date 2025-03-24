@@ -131,7 +131,7 @@ func readTargetsFile(filename string) ([]*model.ScanTarget, error) {
 		target := &model.ScanTarget{
 			IP:       ip,
 			Port:     port,
-			Protocol: "TCP",
+			Protocol: "tcp",
 			ID:       fmt.Sprintf("target-%d", i+1),
 		}
 

@@ -472,11 +472,12 @@ func (ps *ProbeStore) GetProbeByName(name string) *Probe {
 // AddProbe 添加探针到存储
 func (ps *ProbeStore) AddProbe(probe *Probe) {
 	ps.ProbesByName[probe.Name] = probe
-
-	if probe.Protocol == TCP {
+	if probe.Protocol == "TCP" {
 		ps.TCPProbes = append(ps.TCPProbes, probe)
-	} else if probe.Protocol == UDP {
+	} else if probe.Protocol == "UDP" {
 		ps.UDPProbes = append(ps.UDPProbes, probe)
+	} else {
+		log.Printf("Unsupported protocol: %s", probe.Protocol)
 	}
 }
 

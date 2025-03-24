@@ -48,7 +48,7 @@ func singleScanExample(xmapInstance *api.XMap) {
 	target := &model.ScanTarget{
 		IP:       "192.168.1.1",
 		Port:     80,
-		Protocol: "TCP",
+		Protocol: "tcp",
 		ID:       "target-001",
 	}
 
@@ -71,13 +71,13 @@ func batchScanExample(xmapInstance *api.XMap) {
 		{
 			IP:       "example.com",
 			Port:     80,
-			Protocol: "TCP",
+			Protocol: "tcp",
 			ID:       "target-001",
 		},
 		{
 			IP:       "example.org",
 			Port:     443,
-			Protocol: "TCP",
+			Protocol: "tcp",
 			ID:       "target-002",
 		},
 	}
@@ -109,19 +109,19 @@ func taskWithProgressExample(xmapInstance *api.XMap) {
 			{
 				IP:       "example.com",
 				Port:     80,
-				Protocol: "TCP",
+				Protocol: "tcp",
 				ID:       "target-001",
 			},
 			{
 				IP:       "example.org",
 				Port:     443,
-				Protocol: "TCP",
+				Protocol: "tcp",
 				ID:       "target-002",
 			},
 			{
 				IP:       "example.net",
 				Port:     8080,
-				Protocol: "TCP",
+				Protocol: "tcp",
 				ID:       "target-003",
 			},
 		},
@@ -237,7 +237,7 @@ func (e *XMapExecutor) Execute(ctx context.Context, task *RiskScheduleScanTask) 
 		target := &model.ScanTarget{
 			IP:       targetStr,
 			Port:     80, // 默认端口
-			Protocol: "TCP",
+			Protocol: "tcp",
 			ID:       fmt.Sprintf("target-%03d", i+1),
 		}
 		targets = append(targets, target)

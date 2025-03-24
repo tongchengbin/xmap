@@ -54,7 +54,7 @@ match tls m|^\x16\x03[\x00-\x03]..\x02|
 		t.Errorf("Expected probe name 'GetRequest', got '%s'", probes[0].Name)
 	}
 
-	if probes[0].Protocol != "TCP" {
+	if probes[0].Protocol != "tcp" {
 		t.Errorf("Expected protocol 'TCP', got '%s'", probes[0].Protocol)
 	}
 

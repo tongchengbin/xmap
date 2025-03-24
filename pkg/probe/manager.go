@@ -60,7 +60,7 @@ func getDefaultProbeFilePath() string {
 	if path := os.Getenv("XMAP_PROBE_FILE"); path != "" {
 		return path
 	}
-	
+
 	// 然后尝试常见的位置
 	commonPaths := []string{
 		"nmap-service-probes",
@@ -69,13 +69,13 @@ func getDefaultProbeFilePath() string {
 		"/usr/share/nmap/nmap-service-probes",
 		"/usr/local/share/nmap/nmap-service-probes",
 	}
-	
+
 	for _, path := range commonPaths {
 		if _, err := os.Stat(path); err == nil {
 			return path
 		}
 	}
-	
+
 	// 如果都找不到，返回空字符串，将使用内嵌的默认探针数据
 	return ""
 }
@@ -104,7 +104,6 @@ func GetManager(options *FingerprintOptions) (*Manager, error) {
 			return nil, fmt.Errorf("failed to initialize default probe manager: %w", err)
 		}
 	}
-
 	// 如果没有提供选项或选项与默认管理器相同，返回默认管理器
 	if options == nil || options.Equals(DefaultProbeManager.options) {
 		return DefaultProbeManager, nil

@@ -49,7 +49,7 @@ func main() {
 	scanTarget := &model.ScanTarget{
 		IP:       target,
 		Port:     port,
-		Protocol: "TCP",
+		Protocol: "tcp",
 		ID:       fmt.Sprintf("%s:%d", target, port),
 	}
 

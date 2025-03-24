@@ -159,39 +159,55 @@ func WithVerbose(verbose bool) Option {
 
 // Scan 扫描单个目标
 func (x *XMap) Scan(ctx context.Context, target *model.ScanTarget, options ...*model.ScanOptions) (*model.ScanResult, error) {
-	// 转换目标
-	scanTarget := scanner.NewTarget(target.IP, target.Port, scanner.Protocol(target.Protocol))
+	// 使用默认选项
+	opts := &model.ScanOptions{
+		Timeout:          int(x.defaultOptions.Timeout.Seconds()),
+		Retries:          x.defaultOptions.Retries,
+		VersionIntensity: x.defaultOptions.VersionIntensity,
+		MaxParallelism:   x.defaultOptions.MaxParallelism,
+		FastMode:         x.defaultOptions.FastMode,
+		ServiceDetection: true,
+		VersionDetection: true,
+	}
 
-	// 创建扫描选项
-	var opts *model.ScanOptions
+	// 应用用户选项
 	if len(options) > 0 && options[0] != nil {
 		opts = options[0]
 	}
+
+	// 转换目标
+	scannerTarget := scanner.NewTarget(target.IP, target.Port, scanner.Protocol(target.Protocol))
+
+	// 创建扫描选项
 	scanOptions := x.createScanOptions(opts)
 
 	// 执行扫描
-	result, err := x.scanner.ScanWithContext(ctx, scanTarget, scanOptions...)
-	if result == nil && err != nil {
-		return &model.ScanResult{
-			Target: target,
-			Error:  err.Error(),
-		}, err
+	result, err := x.scanner.ScanWithContext(ctx, scannerTarget, scanOptions...)
+	if err != nil {
+		return nil, err
 	}
 
-	// 转换基本结果
+	// 转换结果
 	modelResult := x.convertResult(result, target)
 
-	// 检查是否需要进行Web扫描
-	if result != nil && web.ShouldScan(result.Service) {
-		gologger.Debug().Msgf("Discovered web service %s,applying web scan %s:%d", target.IP, target.Port)
+	// 如果是Web服务，执行Web扫描
+	if web.ShouldScan(result.Service) && x.webScanner != nil {
+		// 设置Web扫描器选项
+		x.webScanner.SetTimeout(time.Duration(opts.Timeout) * time.Second)
+		x.webScanner.SetDebugResponse(opts.DebugResponse)
+
+		// 设置代理
+		if opts.Proxy != "" {
+			x.webScanner.SetProxy(opts.Proxy)
+		}
+
 		// 执行Web扫描
-		webResult, webErr := x.webScanner.ScanWithContext(ctx, scanTarget)
-		if webErr != nil {
-			gologger.Warning().Msgf("Web扫描失败: %v", webErr)
-		} else if webResult != nil {
-			// 将Web扫描结果添加到模型结果中
+		webResult, err := x.webScanner.ScanWithContext(ctx, scannerTarget)
+		if err != nil {
+			gologger.Debug().Msgf("Web扫描失败: %v", err)
+		} else {
+			// 使用Web扫描结果丰富结果
 			x.enrichResultWithWebData(modelResult, webResult)
-			gologger.Debug().Msgf("Webscan for %s:%d，Found %d Components", target.IP, target.Port, len(webResult.Components))
 		}
 	}
 
@@ -312,9 +328,14 @@ func (x *XMap) ExecuteTaskWithProgress(ctx context.Context, task *model.ScanTask
 			if err != nil {
 				gologger.Debug().Msgf("Failed to scan target %s:%d: %v", t.IP, t.Port, err)
 			}
-
-			// 发送结果
+			if result == nil {
+				result = &model.ScanResult{
+					Target: t,
+					Error:  fmt.Sprintf("Failed to scan target %s:%d", t.IP, t.Port),
+				}
+			}
 			resultChan <- result
+
 		}(i, target)
 	}
 

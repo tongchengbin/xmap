@@ -5,7 +5,7 @@ type Protocol string
 
 const (
 	// TCP 协议
-	TCP Protocol = "TCP"
+	TCP Protocol = "tcp"
 	// UDP 协议
 	UDP Protocol = "UDP"
 )

@@ -5,6 +5,9 @@ import (
 	"github.com/projectdiscovery/gologger"
 	"github.com/tongchengbin/appfinger/pkg/external/customrules"
 	"github.com/tongchengbin/appfinger/pkg/rule"
+	"os"
+	"os/exec"
+	"path/filepath"
 )
 
 // InitRuleManager 初始化规则管理器
@@ -33,4 +36,31 @@ func InitRuleManager(fingerprintsPath string) error {
 // ReloadRules 重新加载指纹库规则
 func ReloadRules() error {
 	return rule.GetRuleManager().ReloadRules()
+}
+
+// UpdateRules 从远程更新指纹库规则
+func UpdateRules() error {
+	gologger.Info().Msg("正在从远程更新指纹库规则...")
+	
+	// 直接使用git拉取最新规则
+	// 这里假设规则库在customrules包中有定义
+	rulesDir := customrules.GetDefaultDirectory()
+	gologger.Info().Msgf("指纹库路径: %s", rulesDir)
+	
+	// 检查是否是git仓库
+	if _, err := os.Stat(filepath.Join(rulesDir, ".git")); os.IsNotExist(err) {
+		return fmt.Errorf("指纹库目录不是git仓库，无法更新: %s", rulesDir)
+	}
+	
+	// 执行git pull命令
+	cmd := exec.Command("git", "-C", rulesDir, "pull", "origin", "master")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("更新指纹库失败: %v, 输出: %s", err, string(output))
+	}
+	
+	gologger.Info().Msgf("指纹库更新成功: %s", string(output))
+	
+	// 重新加载规则
+	return ReloadRules()
 }

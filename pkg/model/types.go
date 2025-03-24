@@ -107,6 +107,16 @@ type ScanOptions struct {
 	ProductNameDetection bool `json:"product_name_detection,omitempty"`
 	// 是否使用信息检测
 	InfoDetection bool `json:"info_detection,omitempty"`
+	
+	// Web扫描相关选项
+	// HTTP代理
+	Proxy string `json:"proxy,omitempty"`
+	// 是否禁用图标请求匹配
+	DisableIcon bool `json:"disable_icon,omitempty"`
+	// 是否禁用JavaScript规则匹配
+	DisableJS bool `json:"disable_js,omitempty"`
+	// 是否调试HTTP响应
+	DebugResponse bool `json:"debug_response,omitempty"`
 }
 
 // TaskStatus 表示任务状态

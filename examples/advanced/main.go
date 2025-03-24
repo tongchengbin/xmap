@@ -33,21 +33,21 @@ func main() {
 		{
 			IP:       "example.com",
 			Port:     80,
-			Protocol: "TCP",
+			Protocol: "tcp",
 			ID:       "http-target",
 		},
 		// HTTPS服务
 		{
 			IP:       "example.com",
 			Port:     443,
-			Protocol: "TCP",
+			Protocol: "tcp",
 			ID:       "https-target",
 		},
 		// SSH服务
 		{
 			IP:       "example.com",
 			Port:     22,
-			Protocol: "TCP",
+			Protocol: "tcp",
 			ID:       "ssh-target",
 		},
 	}
@@ -214,7 +214,7 @@ func demonstrateConcurrentScanning(ctx context.Context, xmap *api.XMap) {
 		targets = append(targets, &model.ScanTarget{
 			IP:       "example.com",
 			Port:     80 + i%10, // 使用不同端口
-			Protocol: "TCP",
+			Protocol: "tcp",
 			ID:       fmt.Sprintf("target-%03d", i+1),
 		})
 	}
@@ -289,7 +289,7 @@ func demonstrateErrorHandling(ctx context.Context, xmap *api.XMap) {
 	invalidTarget := &model.ScanTarget{
 		IP:       "invalid-host-that-does-not-exist.example",
 		Port:     80,
-		Protocol: "TCP",
+		Protocol: "tcp",
 		ID:       "invalid-target",
 	}
 
@@ -307,7 +307,7 @@ func demonstrateErrorHandling(ctx context.Context, xmap *api.XMap) {
 	timeoutTarget := &model.ScanTarget{
 		IP:       "example.com",
 		Port:     80,
-		Protocol: "TCP",
+		Protocol: "tcp",
 		ID:       "timeout-target",
 	}
 
