@@ -3,9 +3,10 @@ package api
 import (
 	"context"
 	"encoding/base64"
-	"fmt"
 	"github.com/tongchengbin/appfinger/pkg/external/customrules"
 	"github.com/tongchengbin/xmap/pkg/scanner"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -214,194 +215,214 @@ func (x *XMap) Scan(ctx context.Context, target *model.ScanTarget, options ...*m
 	return modelResult, nil
 }
 
-// BatchScan 批量扫描多个目标
-func (x *XMap) BatchScan(ctx context.Context, targets []*model.ScanTarget, options *model.ScanOptions) ([]*model.ScanResult, error) {
-	// 转换目标
-	scanTargets := make([]*scanner.Target, len(targets))
-	for i, target := range targets {
-		scanTargets[i] = scanner.NewTarget(target.IP, target.Port, scanner.Protocol(target.Protocol))
+// ExecuteWithOptions 使用指定选项执行批量扫描
+func (x *XMap) ExecuteWithOptions(ctx context.Context, targets []*model.ScanTarget, options *model.ScanOptions, progressCallback func(completed, total int, percentage float64, status string)) ([]*model.ScanResult, error) {
+	if options == nil {
+		options = &model.ScanOptions{}
 	}
 
-	// 创建扫描选项
-	scanOptions := x.createScanOptions(options)
-
-	// 执行扫描
-	results, err := x.scanner.BatchScanWithContext(ctx, scanTargets, scanOptions...)
-	if err != nil {
-		return nil, err
+	// 设置默认并行数
+	if options.MaxParallelism <= 0 {
+		options.MaxParallelism = 10
 	}
 
-	// 转换结果
-	modelResults := make([]*model.ScanResult, len(results))
-	for i, result := range results {
-		modelResults[i] = x.convertResult(result, targets[i])
+	totalTargets := len(targets)
 
-		// 检查是否需要进行Web扫描
-		if web.ShouldScan(result.Service) {
-			gologger.Debug().Msgf("检测到HTTP服务，执行Web扫描: %s:%d", targets[i].IP, targets[i].Port)
-
-			// 执行Web扫描
-			webResult, webErr := x.webScanner.ScanWithContext(ctx, scanTargets[i])
-			if webErr != nil {
-				gologger.Warning().Msgf("Web扫描失败: %v", webErr)
-			} else if webResult != nil {
-				// 将Web扫描结果添加到模型结果中
-				x.enrichResultWithWebData(modelResults[i], webResult)
-				gologger.Debug().Msgf("Web扫描成功，发现 %d 个指纹", len(webResult.Components))
-			}
-		}
-	}
-
-	return modelResults, nil
-}
-
-// ExecuteTask 执行扫描任务
-func (x *XMap) ExecuteTask(ctx context.Context, task *model.ScanTask) (*model.ScanTask, []*model.ScanResult, error) {
-	// 更新任务状态
-	task.Status = model.TaskStatusRunning
-	task.StartedAt = time.Now()
-
-	// 执行批量扫描
-	results, err := x.BatchScan(ctx, task.Targets, task.Options)
-
-	// 更新任务状态
-	task.CompletedAt = time.Now()
-	if err != nil {
-		task.Status = model.TaskStatusFailed
-		return task, results, err
-	}
-
-	task.Status = model.TaskStatusCompleted
-	return task, results, nil
-}
-
-// ExecuteTaskWithProgress 执行扫描任务并报告进度
-func (x *XMap) ExecuteTaskWithProgress(ctx context.Context, task *model.ScanTask, progressCallback func(*model.ScanProgress)) (*model.ScanTask, []*model.ScanResult, error) {
-	// 更新任务状态
-	task.Status = model.TaskStatusRunning
-	task.StartedAt = time.Now()
-
-	// 创建进度跟踪器
-	progress := &model.ScanProgress{
-		TaskID:           task.ID,
-		TotalTargets:     len(task.Targets),
-		CompletedTargets: 0,
-		SuccessTargets:   0,
-		FailedTargets:    0,
-		Percentage:       0,
-		Status:           model.TaskStatusRunning,
-		StartTime:        task.StartedAt,
-		CurrentTime:      time.Now(),
-	}
-
-	// 创建结果通道
-	resultChan := make(chan *model.ScanResult, len(task.Targets))
-
-	// 创建等待组
-	var wg sync.WaitGroup
-
-	// 创建上下文
+	// 创建上下文，支持取消
 	scanCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// 设置最大并行数
-	maxParallelism := 10
-	if task.Options != nil && task.Options.MaxParallelism > 0 {
-		maxParallelism = task.Options.MaxParallelism
-	}
+	// 创建信号量，控制并行度
+	sem := make(chan struct{}, options.MaxParallelism)
 
-	// 创建信号量通道
-	sem := make(chan struct{}, maxParallelism)
-
-	// 启动扫描协程
-	for i, target := range task.Targets {
-		wg.Add(1)
-		go func(idx int, t *model.ScanTarget) {
-			defer wg.Done()
-
-			// 获取信号量
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
-			// 执行扫描
-			result, err := x.Scan(scanCtx, t, task.Options)
-			if err != nil {
-				gologger.Debug().Msgf("Failed to scan target %s:%d: %v", t.IP, t.Port, err)
-			}
-			if result == nil {
-				result = &model.ScanResult{
-					Target: t,
-					Error:  fmt.Sprintf("Failed to scan target %s:%d", t.IP, t.Port),
-				}
-			}
-			resultChan <- result
-
-		}(i, target)
-	}
+	// 创建结果通道和等待组
+	resultChan := make(chan *model.ScanResult, options.MaxParallelism*2)
+	var wg sync.WaitGroup
 
 	// 启动结果收集协程
-	go func() {
-		wg.Wait()
-		close(resultChan)
-	}()
+	results := make([]*model.ScanResult, 0, totalTargets)
+	done := make(chan struct{})
 
-	// 收集结果并更新进度
-	results := make([]*model.ScanResult, 0, len(task.Targets))
+	// 进度跟踪变量
+	completedTargets := 0
+	successTargets := 0
+	failedTargets := 0
 	lastProgressUpdate := time.Now()
 	progressUpdateInterval := 500 * time.Millisecond
 
-	for result := range resultChan {
-		results = append(results, result)
+	go func() {
+		for result := range resultChan {
+			results = append(results, result)
 
-		// 更新进度
-		progress.CompletedTargets++
-		if result.Error == "" {
-			progress.SuccessTargets++
-		} else {
-			progress.FailedTargets++
-		}
-		progress.Percentage = float64(progress.CompletedTargets) / float64(progress.TotalTargets) * 100
-		progress.CurrentTime = time.Now()
+			// 更新进度
+			completedTargets++
+			if result.Error == "" {
+				successTargets++
+			} else {
+				failedTargets++
+			}
 
-		// 计算预计剩余时间
-		if progress.CompletedTargets > 0 {
-			elapsedSeconds := int(progress.CurrentTime.Sub(progress.StartTime).Seconds())
-			if elapsedSeconds > 0 {
-				targetsPerSecond := float64(progress.CompletedTargets) / float64(elapsedSeconds)
-				if targetsPerSecond > 0 {
-					remainingTargets := progress.TotalTargets - progress.CompletedTargets
-					progress.EstimatedTimeRemaining = int(float64(remainingTargets) / targetsPerSecond)
+			percentage := float64(completedTargets) / float64(totalTargets) * 100
+			currentTime := time.Now()
+
+			// 调用进度回调
+			if progressCallback != nil && time.Since(lastProgressUpdate) >= progressUpdateInterval {
+				status := model.StatusRunning
+				if completedTargets == totalTargets {
+					status = model.StatusCompleted
 				}
+				progressCallback(completedTargets, totalTargets, percentage, status)
+				lastProgressUpdate = currentTime
 			}
 		}
+		close(done)
+	}()
+
+	// 启动扫描协程
+	for i, target := range targets {
+		wg.Add(1)
+		sem <- struct{}{} // 获取信号量
+
+		go func(i int, target *model.ScanTarget) {
+			defer func() {
+				<-sem // 释放信号量
+				wg.Done()
+			}()
+
+			// 检查上下文是否已取消
+			if scanCtx.Err() != nil {
+				resultChan <- &model.ScanResult{
+					Target: target,
+					Error:  "scan canceled",
+				}
+				return
+			}
+
+			// 执行扫描
+			result, err := x.Scan(scanCtx, target, options)
+			if err != nil {
+				resultChan <- &model.ScanResult{
+					Target: target,
+					Error:  err.Error(),
+				}
+				return
+			}
+
+			// 发送结果
+			resultChan <- result
+		}(i, target)
+	}
+
+	// 等待所有扫描完成
+	wg.Wait()
+	close(resultChan)
+
+	// 等待结果处理完成
+	<-done
+
+	return results, nil
+}
+
+// ExecuteWithResultCallback 使用指定选项执行批量扫描，并实时回调每个扫描结果
+func (x *XMap) ExecuteWithResultCallback(
+	ctx context.Context,
+	targets []*model.ScanTarget,
+	options *model.ScanOptions,
+	progressCallback func(completed, total int, percentage float64, status string),
+	resultCallback func(*model.ScanResult),
+) error {
+	if options == nil {
+		options = &model.ScanOptions{}
+	}
+	// 设置默认并行数
+	if options.MaxParallelism <= 0 {
+		options.MaxParallelism = 10
+	}
+	totalTargets := len(targets)
+	// 创建上下文，支持取消
+	scanCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	// 创建信号量，控制并行度
+	sem := make(chan struct{}, options.MaxParallelism)
+	// 创建等待组
+	var wg sync.WaitGroup
+	// 进度跟踪变量
+	var progressMutex sync.Mutex
+	completedTargets := 0
+	successTargets := 0
+	failedTargets := 0
+	lastProgressUpdate := time.Now()
+	progressUpdateInterval := 500 * time.Millisecond
+	// 处理单个结果的函数
+	handleResult := func(result *model.ScanResult) {
+		// 如果提供了结果回调，则调用
+		if resultCallback != nil {
+			resultCallback(result)
+		}
+
+		// 更新进度
+		progressMutex.Lock()
+		completedTargets++
+		if result.Error == "" {
+			successTargets++
+		} else {
+			failedTargets++
+		}
+
+		percentage := float64(completedTargets) / float64(totalTargets) * 100
+		currentTime := time.Now()
 
 		// 调用进度回调
 		if progressCallback != nil && time.Since(lastProgressUpdate) >= progressUpdateInterval {
-			progressCallback(progress)
-			lastProgressUpdate = time.Now()
+			status := model.StatusRunning
+			if completedTargets == totalTargets {
+				status = model.StatusCompleted
+			}
+			progressCallback(completedTargets, totalTargets, percentage, status)
+			lastProgressUpdate = currentTime
 		}
+		progressMutex.Unlock()
 	}
+	// 启动扫描协程
+	for i, target := range targets {
+		wg.Add(1)
+		sem <- struct{}{} // 获取信号量
+		go func(i int, target *model.ScanTarget) {
+			defer func() {
+				<-sem // 释放信号量
+				wg.Done()
+			}()
+			// 检查上下文是否已取消
+			if scanCtx.Err() != nil {
+				result := &model.ScanResult{
+					Target: target,
+					Error:  "scan canceled",
+				}
+				handleResult(result)
+				return
+			}
+			// 执行扫描
+			result, err := x.Scan(scanCtx, target, options)
+			if err != nil {
+				result = &model.ScanResult{
+					Target: target,
+					Error:  err.Error(),
+				}
+			}
+			// 处理结果
+			handleResult(result)
+		}(i, target)
+	}
+
+	// 等待所有扫描完成
+	wg.Wait()
 
 	// 最后一次进度更新
-	if progressCallback != nil {
-		progress.Status = model.TaskStatusCompleted
-		progress.CurrentTime = time.Now()
-		progress.Percentage = 100
-		progress.EstimatedTimeRemaining = 0
-		progressCallback(progress)
+	if progressCallback != nil && completedTargets == totalTargets {
+		progressCallback(completedTargets, totalTargets, 100, model.StatusCompleted)
 	}
 
-	// 更新任务状态
-	task.CompletedAt = time.Now()
-	task.Status = model.TaskStatusCompleted
-
-	return task, results, nil
-}
-
-// ExecuteWithFile 从文件执行扫描任务
-func (x *XMap) ExecuteWithFile(ctx context.Context, targetsFile string, options *model.ScanOptions) ([]*model.ScanResult, error) {
-	// TODO: 实现从文件加载目标并执行扫描
-	return nil, fmt.Errorf("not implemented")
+	return nil
 }
 
 // createScanOptions 创建扫描选项
@@ -575,4 +596,64 @@ func (x *XMap) convertResult(result *scanner.ScanResult, target *model.ScanTarge
 	}
 
 	return modelResult
+}
+
+// ExecuteWithTargetsString 使用目标字符串执行批量扫描
+func (x *XMap) ExecuteWithTargetsString(ctx context.Context, targetsStr string, options *model.ScanOptions, progressCallback func(completed, total int, percentage float64, status string)) ([]*model.ScanResult, error) {
+	// 解析目标字符串
+	targets, err := x.ParseTargetsString(targetsStr)
+	if err != nil {
+		return nil, err
+	}
+
+	// 执行扫描
+	return x.ExecuteWithOptions(ctx, targets, options, progressCallback)
+}
+
+// ParseTargetsString 将目标字符串解析为ScanTarget切片
+func (x *XMap) ParseTargetsString(targetsStr string) ([]*model.ScanTarget, error) {
+	lines := strings.Split(targetsStr, "\n")
+	targets := make([]*model.ScanTarget, 0, len(lines))
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		// 解析目标格式: IP:Port/Protocol
+		parts := strings.Split(line, ":")
+		if len(parts) < 1 {
+			continue
+		}
+
+		ip := parts[0]
+		port := 0
+		protocol := "tcp"
+
+		if len(parts) > 1 {
+			portProto := strings.Split(parts[1], "/")
+			if len(portProto) > 0 {
+				portStr := portProto[0]
+				portInt, err := strconv.Atoi(portStr)
+				if err == nil {
+					port = portInt
+				}
+			}
+
+			if len(portProto) > 1 {
+				protocol = strings.ToLower(portProto[1])
+			}
+		}
+
+		target := &model.ScanTarget{
+			IP:       ip,
+			Port:     port,
+			Protocol: protocol,
+		}
+
+		targets = append(targets, target)
+	}
+
+	return targets, nil
 }

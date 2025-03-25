@@ -2,7 +2,6 @@ package model
 
 import (
 	"encoding/json"
-	"time"
 )
 
 // ScanTarget 表示扫描目标
@@ -49,26 +48,6 @@ func (r *ScanResult) JSON() string {
 		panic(err)
 	}
 	return string(b)
-}
-
-// ScanTask 表示扫描任务
-type ScanTask struct {
-	// 任务ID
-	ID string `json:"id"`
-	// 扫描目标列表
-	Targets []*ScanTarget `json:"targets"`
-	// 扫描选项
-	Options *ScanOptions `json:"options,omitempty"`
-	// 任务状态
-	Status string `json:"status"`
-	// 创建时间
-	CreatedAt time.Time `json:"created_at"`
-	// 开始时间
-	StartedAt time.Time `json:"started_at,omitempty"`
-	// 完成时间
-	CompletedAt time.Time `json:"completed_at,omitempty"`
-	// 自定义元数据
-	Metadata map[string]interface{} `json:"metadata,omitempty"`
 }
 
 // ScanOptions 表示扫描选项
@@ -119,40 +98,16 @@ type ScanOptions struct {
 	DebugResponse bool `json:"debug_response,omitempty"`
 }
 
-// TaskStatus 表示任务状态
+// 常量定义
 const (
-	// TaskStatusPending 表示任务等待中
-	TaskStatusPending = "pending"
-	// TaskStatusRunning 表示任务运行中
-	TaskStatusRunning = "running"
-	// TaskStatusCompleted 表示任务已完成
-	TaskStatusCompleted = "completed"
-	// TaskStatusFailed 表示任务失败
-	TaskStatusFailed = "failed"
-	// TaskStatusCanceled 表示任务已取消
-	TaskStatusCanceled = "canceled"
+	// StatusPending 表示等待中
+	StatusPending = "pending"
+	// StatusRunning 表示运行中
+	StatusRunning = "running"
+	// StatusCompleted 表示已完成
+	StatusCompleted = "completed"
+	// StatusFailed 表示失败
+	StatusFailed = "failed"
+	// StatusCanceled 表示已取消
+	StatusCanceled = "canceled"
 )
-
-// ScanProgress 表示扫描进度
-type ScanProgress struct {
-	// 任务ID
-	TaskID string `json:"task_id"`
-	// 总目标数
-	TotalTargets int `json:"total_targets"`
-	// 已完成目标数
-	CompletedTargets int `json:"completed_targets"`
-	// 成功目标数
-	SuccessTargets int `json:"success_targets"`
-	// 失败目标数
-	FailedTargets int `json:"failed_targets"`
-	// 进度百分比
-	Percentage float64 `json:"percentage"`
-	// 当前状态
-	Status string `json:"status"`
-	// 开始时间
-	StartTime time.Time `json:"start_time,omitempty"`
-	// 当前时间
-	CurrentTime time.Time `json:"current_time"`
-	// 预计剩余时间(秒)
-	EstimatedTimeRemaining int `json:"estimated_time_remaining,omitempty"`
-}
