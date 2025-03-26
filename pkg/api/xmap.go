@@ -3,12 +3,13 @@ package api
 import (
 	"context"
 	"encoding/base64"
-	"github.com/tongchengbin/appfinger/pkg/external/customrules"
-	"github.com/tongchengbin/xmap/pkg/scanner"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/tongchengbin/appfinger/pkg/external/customrules"
+	"github.com/tongchengbin/xmap/pkg/scanner"
 
 	"github.com/projectdiscovery/gologger"
 	"github.com/tongchengbin/xmap/pkg/model"

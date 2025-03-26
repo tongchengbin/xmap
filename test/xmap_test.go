@@ -402,3 +402,23 @@ func TestTimeoutScan(t *testing.T) {
 	assert.True(t, result.Duration > 10)
 	assert.Equal(t, result.Service, "")
 }
+
+func TestRemoteWaf(t *testing.T) {
+	// 创建XMap实例
+	xmap := api.NewXMap(
+		api.WithTimeout(4*time.Second),
+		api.WithRetries(1),
+		api.WithDebugRequest(true),
+		api.WithDebugResponse(true),
+		api.WithVerbose(true),
+	)
+	ctx := context.Background()
+	result, err := xmap.Scan(ctx, &model.ScanTarget{
+		IP:       "frp.lostpeach.cn",
+		Port:     60080,
+		Protocol: string(scanner.TCP),
+	})
+	assert.NoError(t, err)
+	assert.True(t, result.Duration > 10)
+	assert.Equal(t, result.Service, "")
+}

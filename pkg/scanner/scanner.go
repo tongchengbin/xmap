@@ -284,7 +284,7 @@ func (s *ServiceScanner) readResponse(conn net.Conn, options *ScanOptions) ([]by
 				return responseData, nil
 			}
 			// 否则返回超时错误
-			return responseData, fmt.Errorf("max read timeout")
+			return responseData, fmt.Errorf(fmt.Sprintf("max read timeout: %s", options.Timeout.String()))
 		}
 
 		// 设置单次读取超时
