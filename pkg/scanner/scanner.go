@@ -3,6 +3,7 @@ package scanner
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -81,7 +82,11 @@ func (s *ServiceScanner) ScanWithContext(ctx context.Context, target *Target, op
 	// 对探针进行排序，优先使用适合当前端口的探针
 	probes = sortProbes(probes, target.Port, false)
 	// 执行扫描
-	err := s.executeProbes(ctx, target, probes, result, scanOptions)
+	err := s.executeProbes(ctx, target, probes, false, result, scanOptions)
+	if result.Service == "ssl" {
+		probes = sortProbes(probes, target.Port, true)
+		err = s.executeProbes(ctx, target, probes, true, result, scanOptions)
+	}
 	result.Complete(err)
 	return result, err
 }
@@ -154,7 +159,7 @@ func (s *ServiceScanner) createScanOptions(options []ScanOption) *ScanOptions {
 }
 
 // executeProbes 执行探针扫描
-func (s *ServiceScanner) executeProbes(ctx context.Context, target *Target, probes []*probe.Probe, result *ScanResult, options *ScanOptions) error {
+func (s *ServiceScanner) executeProbes(ctx context.Context, target *Target, probes []*probe.Probe, useSSl bool, result *ScanResult, options *ScanOptions) error {
 	// 对每个探针执行扫描
 	for _, pb := range probes {
 		// 检查上下文是否已取消
@@ -164,27 +169,9 @@ func (s *ServiceScanner) executeProbes(ctx context.Context, target *Target, prob
 		default:
 			// 继续处理
 		}
-		// 检查目标是否已被判定为无效
-		if target.StatusCheck.IsClose() {
-			gologger.Warning().Msgf("目标 %s:%d 已被判定为无效，终止后续探针扫描", target.IP, target.Port)
-			return target.StatusCheck.GetReason()
-		}
-		// 检查目标是否可能被防火墙阻止
-		if target.StatusCheck.IsLikelyFirewalled() {
-			return target.StatusCheck.GetReason()
-		}
 		// 执行探针
-		response, err := s.executeProbe(ctx, target, pb, options)
-		if err != nil {
-			// 使用 HandleError 方法统一处理错误
-			shouldTerminate, _ := target.StatusCheck.HandleError(err, target)
-			if shouldTerminate {
-				return target.StatusCheck.GetReason()
-			}
-			// 继续尝试下一个探针
-			continue
-		}
-		if s.defaultOptions.DebugResponse {
+		response, errType := s.executeProbe(ctx, target, pb, useSSl, options)
+		if s.defaultOptions.DebugResponse && len(response) > 0 {
 			gologger.Print().Msgf("Read (%d bytes) for probe %s on %s:%d:\n%s", len(response), pb.Name, target.IP, target.Port, formatProbeData(response))
 		}
 		// 匹配响应
@@ -196,6 +183,13 @@ func (s *ServiceScanner) executeProbes(ctx context.Context, target *Target, prob
 			result.Service = matchService.Service
 			return nil
 		}
+		if len(response) > 0 {
+			target.StatusCheck.SetOpen()
+		}
+		shouldTerminate := target.StatusCheck.HandleError(errType, target)
+		if shouldTerminate {
+			return target.StatusCheck.GetReason()
+		}
 	}
 	// 如果没有匹配到任何服务
 	return ErrNotMatched
@@ -206,74 +200,88 @@ func replaceProbeRaw(raw []byte, target *Target) []byte {
 }
 
 // executeProbe 执行单个探针
-func (s *ServiceScanner) executeProbe(ctx context.Context, target *Target, probe *probe.Probe, options *ScanOptions) ([]byte, error) {
+func (s *ServiceScanner) executeProbe(ctx context.Context, target *Target, probe *probe.Probe, UseSSl bool, options *ScanOptions) ([]byte, ErrorType) {
 	// 创建连接超时上下文
 	timeoutCtx, cancel := context.WithTimeout(ctx, options.Timeout)
 	defer cancel()
-
 	if options.DebugRequest {
-		gologger.Debug().Msgf("Sending probe %s to %s:%d", probe.Name, target.IP, target.Port)
+		gologger.Debug().Msgf("Sending probe %s to %s", probe.Name, target.String())
 	}
 	// 创建连接
-	conn, err := s.createConnection(timeoutCtx, target, options.Timeout)
+	conn, err := s.createConnection(timeoutCtx, string(target.Protocol), fmt.Sprintf("%s:%d", target.IP, target.Port), UseSSl, options.Timeout)
 	if err != nil {
 		gologger.Debug().Msgf("Connect from [%s:%d] (timeout: 5000ms) %s", target.IP, target.Port, err)
-		// 使用 HandleError 方法统一处理错误
-		shouldTerminate, wrappedErr := target.StatusCheck.HandleError(err, target)
-		if shouldTerminate {
-			return nil, wrappedErr
-		}
-		return nil, wrappedErr
+		return nil, ParseNetworkError(err)
 	}
 	defer conn.Close()
-
-	// 连接成功，更新状态检查器
-	target.StatusCheck.SetOpen()
-
 	// 设置读写超时
 	_ = conn.SetDeadline(time.Now().Add(options.Timeout))
 	// 发送探针数据
 	raw := replaceProbeRaw(probe.SendData, target)
 	_, err = conn.Write(raw)
-	gologger.Debug().Msgf("Sendto request for %d bytes to [%s:%d]", len(raw), target.IP, target.Port)
+	if UseSSl {
+		gologger.Debug().Msgf("Sendto request for %d bytes to [ssl://%s:%d]", len(raw), target.IP, target.Port)
+	} else {
+		gologger.Debug().Msgf("Sendto request for %d bytes to [%s:%d]", len(raw), target.IP, target.Port)
+	}
+
 	if err != nil {
 		gologger.Debug().Msgf("WRITE Faild for [%s:%d]", target.IP, target.Port)
 		// 使用 HandleError 方法统一处理错误
-		shouldTerminate, wrappedErr := target.StatusCheck.HandleError(err, target)
-		if shouldTerminate {
-			return nil, wrappedErr
-		}
-		return nil, wrappedErr
+		return nil, ParseNetworkError(err)
 	}
 	// 读取响应
 	response, err := s.readResponse(conn, options)
 	if len(response) > 0 {
-		target.StatusCheck.SetReadOK()
+		return response, ErrNil
 	}
 	if err != nil {
-		gologger.Debug().Msgf("READ EOF for  [%s:%d]", target.IP, target.Port)
+		gologger.Debug().Msgf("READ Err for  [%s:%d]", target.IP, target.Port)
 		// 使用 HandleError 方法统一处理错误
-		shouldTerminate, wrappedErr := target.StatusCheck.HandleError(err, target)
-		if shouldTerminate {
-			return response, wrappedErr
-		}
-		return response, wrappedErr
+		return response, ParseNetworkError(err)
 	}
-	return response, nil
+	return response, ErrNil
 }
 
 // createConnection 创建网络连接
-func (s *ServiceScanner) createConnection(ctx context.Context, target *Target, timeout time.Duration) (net.Conn, error) {
+func (s *ServiceScanner) createConnection(ctx context.Context, protocol string, address string, useSSL bool, timeout time.Duration) (net.Conn, error) {
 	dialer := &net.Dialer{
 		Timeout: timeout,
 	}
-	if target.Protocol == TCP {
-		return dialer.DialContext(ctx, "tcp", fmt.Sprintf("%s:%d", target.IP, target.Port))
-	} else if target.Protocol == UDP {
-		return dialer.DialContext(ctx, "udp", fmt.Sprintf("%s:%d", target.IP, target.Port))
-	} else {
-		return nil, fmt.Errorf("unsupported protocol: %s", target.Protocol)
+	// 检查是否需要 TLS 连接
+	if useSSL {
+		// 先创建普通连接
+		conn, err := dialer.DialContext(ctx, "tcp", address)
+		if err != nil {
+			return nil, err
+		}
+		// TLS 配置
+		tlsConfig := &tls.Config{
+			InsecureSkipVerify: true, // 跳过证书验证，用于扫描
+			MinVersion:         tls.VersionTLS10,
+			MaxVersion:         tls.VersionTLS13,
+		}
+		// 升级为 TLS 连接
+		tlsConn := tls.Client(conn, tlsConfig)
+		// 设置握手超时
+		if err := tlsConn.SetDeadline(time.Now().Add(timeout)); err != nil {
+			conn.Close()
+			return nil, err
+		}
+		// 执行 TLS 握手
+		if err := tlsConn.HandshakeContext(ctx); err != nil {
+			conn.Close()
+			return nil, err
+		}
+		// 重置超时
+		if err := tlsConn.SetDeadline(time.Time{}); err != nil {
+			tlsConn.Close()
+			return nil, err
+		}
+		return tlsConn, nil
 	}
+	// 普通 TCP 连接
+	return dialer.DialContext(ctx, protocol, address)
 }
 
 // readResponse 从连接中读取响应数据
@@ -299,7 +307,6 @@ func (s *ServiceScanner) readResponse(conn net.Conn, options *ScanOptions) ([]by
 			remainingTime = 100 * time.Millisecond // 最小超时时间
 		}
 		_ = conn.SetReadDeadline(time.Now().Add(remainingTime))
-
 		// 读取数据
 		n, err := conn.Read(buffer)
 		// 如果读取到数据，追加到响应中
@@ -318,9 +325,8 @@ func (s *ServiceScanner) readResponse(conn net.Conn, options *ScanOptions) ([]by
 		// 处理错误
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				return responseData, ErrEOF
+				return responseData, err
 			}
-			err = ErrReadTimeout
 		}
 	}
 	return responseData, nil
@@ -329,7 +335,7 @@ func (s *ServiceScanner) readResponse(conn net.Conn, options *ScanOptions) ([]by
 // formatProbeData 格式化探针数据以便于日志输出
 func formatProbeData(data []byte) string {
 	if len(data) == 0 {
-		return "NULL"
+		return "<NULL>"
 	}
 
 	var result strings.Builder

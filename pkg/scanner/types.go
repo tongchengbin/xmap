@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"time"
 )
@@ -26,6 +27,10 @@ type Target struct {
 	Protocol Protocol
 	// 状态检查器，用于跟踪连接状态
 	StatusCheck *PortStatusCheck
+}
+
+func (t *Target) String() string {
+	return fmt.Sprintf("%s:%d", t.IP, t.Port)
 }
 
 // NewTarget 创建新的扫描目标

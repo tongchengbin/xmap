@@ -416,7 +416,7 @@ func TestRemoteWaf(t *testing.T) {
 	ctx := context.Background()
 	result, err := xmap.Scan(ctx, &model.ScanTarget{
 		IP:       "frp.lostpeach.cn",
-		Port:     60080,
+		Port:     443,
 		Protocol: string(scanner.TCP),
 	})
 	println(result, err)

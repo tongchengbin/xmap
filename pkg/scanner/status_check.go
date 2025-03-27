@@ -1,6 +1,8 @@
 package scanner
 
 import (
+	"errors"
+	"fmt"
 	"github.com/projectdiscovery/gologger"
 )
 
@@ -15,7 +17,9 @@ type PortStatusCheck struct {
 	ReadTimeout          int    // 读取超时次数
 	WriteTimeout         int    // 写入超时次数
 	FailuresSinceSuccess int    // 上次成功后的失败次数
-	reason               error
+	reason               string
+	NotMatch             int  // 未匹配上次数
+	Terminate            bool // 是否可以判断端口已经关闭
 }
 
 type PortStatus int
@@ -31,6 +35,9 @@ func (p *PortStatusCheck) SetReadOK() {
 	p.ReadOk++
 }
 
+func (p *PortStatusCheck) SetTerminate() {
+	p.Terminate = true
+}
 func (p *PortStatusCheck) SetClose(failureType string) {
 	p.Close++
 	p.ConsecutiveClose++
@@ -40,12 +47,13 @@ func (p *PortStatusCheck) SetClose(failureType string) {
 }
 
 func (p *PortStatusCheck) GetReason() error {
-	return p.reason
+	return errors.New(p.reason)
 }
 func (p *PortStatusCheck) IsClose() bool {
 	// 判断端口是否关闭的条件：
+
 	// 1. 从未成功连接且至少有3次连续失败
-	if p.Open == 0 && p.ConsecutiveClose >= 3 {
+	if p.Open == 0 && p.ConsecutiveClose >= 6 {
 		return true
 	}
 
@@ -53,8 +61,13 @@ func (p *PortStatusCheck) IsClose() bool {
 	if p.Open > 0 && p.FailuresSinceSuccess >= 5 {
 		return true
 	}
-	// read timeout max
-	if p.ReadOk == 0 && (p.ReadTimeout > 10 || p.WriteTimeout > 10) {
+
+	// 如果一次未成功连接
+	if p.Open == 0 && (p.ReadTimeout > 5 || p.WriteTimeout > 5) {
+		return true
+	}
+	if p.ConsecutiveClose > 10 {
+		// 连续失败10次
 		return true
 	}
 
@@ -70,44 +83,42 @@ func (p *PortStatusCheck) IsLikelyFirewalled() bool {
 // 返回：
 // - 是否应该终止扫描
 // - 包装后的错误
-func (p *PortStatusCheck) HandleError(err error, target *Target) (bool, error) {
-	if err == nil {
-		return false, nil
-	}
-	p.reason = err
-
+func (p *PortStatusCheck) HandleError(errType ErrorType, target *Target) bool {
 	// 解析错误类型
-	errType, specificErr, _ := ParseNetworkError(err)
-
+	defer fmt.Printf("open: %d not match: %d read: %d write: %d ConsecutiveClose: %d\n", p.Open, p.NotMatch, p.ReadTimeout, p.WriteTimeout, p.ConsecutiveClose)
 	// 根据错误类型更新状态
 	switch errType {
-	case ErrorTypePortClosed:
-		p.SetClose("refused")
-		// 对于明确拒绝的连接，可以更快地判定为无效目标
-		return true, p.reason
+	case ErrNil:
+		p.NotMatch++
 	case ErrorTypeReadTimeout:
 		p.ReadTimeout++
-		p.SetClose("read_timeout")
+		p.reason = "read_timeout"
 	case ErrorTypeWriteTimeout:
 		p.WriteTimeout++
-		p.SetClose("write_timeout")
+		p.reason = "write_timeout"
 	case ErrorTypeConnectionTimeout:
-		p.WriteTimeout++ // 连接超时也计入写入超时
-		p.SetClose("timeout")
+		p.WriteTimeout++
+		p.reason = "connection_timeout"
 	case ErrorTypeNetworkUnreachable:
-		p.SetClose("network_unreachable")
+		p.reason = "network_unreachable"
+		p.Terminate = true
+		return true
 	case ErrorTypeHostUnreachable:
-		p.SetClose("host_unreachable")
+		p.reason = "host_unreachable"
+		p.SetTerminate()
+		return true
+	case ErrorEOF:
+		p.reason = "EOF"
+		p.ConsecutiveClose++
 	default:
 		p.SetClose("unknown")
-		gologger.Debug().Msgf("未知错误: %s:%d - %v", target.IP, target.Port, err)
+		gologger.Debug().Msgf("未知错误: %s:%d - %v", target.IP, target.Port, errType)
 	}
-
 	// 检查是否应该终止扫描
 	if p.IsClose() {
-		return true, p.reason
+		return true
 	}
-	return false, specificErr
+	return false
 }
 
 type SocketStatus struct {
