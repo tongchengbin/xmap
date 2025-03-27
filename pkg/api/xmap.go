@@ -202,7 +202,6 @@ func (x *XMap) Scan(ctx context.Context, target *model.ScanTarget, options ...*m
 		if opts.Proxy != "" {
 			x.webScanner.SetProxy(opts.Proxy)
 		}
-
 		// 执行Web扫描
 		webResult, err := x.webScanner.ScanWithContext(ctx, scannerTarget)
 		if err != nil {

@@ -19,6 +19,8 @@ var (
 	// ErrReadTimeout 表示读取超时
 	ErrReadTimeout = errors.New("read timeout")
 
+	ErrEOF = errors.New("EOF")
+
 	// ErrWriteTimeout 表示写入超时
 	ErrWriteTimeout = errors.New("write timeout")
 

@@ -1,9 +1,11 @@
 package scanner
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"strings"
 	"sync"
@@ -162,7 +164,6 @@ func (s *ServiceScanner) executeProbes(ctx context.Context, target *Target, prob
 		default:
 			// 继续处理
 		}
-
 		// 检查目标是否已被判定为无效
 		if target.StatusCheck.IsClose() {
 			gologger.Warning().Msgf("目标 %s:%d 已被判定为无效，终止后续探针扫描", target.IP, target.Port)
@@ -200,6 +201,10 @@ func (s *ServiceScanner) executeProbes(ctx context.Context, target *Target, prob
 	return ErrNotMatched
 }
 
+func replaceProbeRaw(raw []byte, target *Target) []byte {
+	return bytes.Replace(raw, []byte("{Host}"), []byte(fmt.Sprintf("%s:%d", target.IP, target.Port)), 1)
+}
+
 // executeProbe 执行单个探针
 func (s *ServiceScanner) executeProbe(ctx context.Context, target *Target, probe *probe.Probe, options *ScanOptions) ([]byte, error) {
 	// 创建连接超时上下文
@@ -209,10 +214,10 @@ func (s *ServiceScanner) executeProbe(ctx context.Context, target *Target, probe
 	if options.DebugRequest {
 		gologger.Debug().Msgf("Sending probe %s to %s:%d", probe.Name, target.IP, target.Port)
 	}
-
 	// 创建连接
 	conn, err := s.createConnection(timeoutCtx, target, options.Timeout)
 	if err != nil {
+		gologger.Debug().Msgf("Connect from [%s:%d] (timeout: 5000ms) %s", target.IP, target.Port, err)
 		// 使用 HandleError 方法统一处理错误
 		shouldTerminate, wrappedErr := target.StatusCheck.HandleError(err, target)
 		if shouldTerminate {
@@ -228,9 +233,11 @@ func (s *ServiceScanner) executeProbe(ctx context.Context, target *Target, probe
 	// 设置读写超时
 	_ = conn.SetDeadline(time.Now().Add(options.Timeout))
 	// 发送探针数据
-	_, err = conn.Write(probe.SendData)
+	raw := replaceProbeRaw(probe.SendData, target)
+	_, err = conn.Write(raw)
+	gologger.Debug().Msgf("Sendto request for %d bytes to [%s:%d]", len(raw), target.IP, target.Port)
 	if err != nil {
-		gologger.Debug().Msgf("发送探针数据到 %s:%d 失败: %v", target.IP, target.Port, err)
+		gologger.Debug().Msgf("WRITE Faild for [%s:%d]", target.IP, target.Port)
 		// 使用 HandleError 方法统一处理错误
 		shouldTerminate, wrappedErr := target.StatusCheck.HandleError(err, target)
 		if shouldTerminate {
@@ -238,13 +245,13 @@ func (s *ServiceScanner) executeProbe(ctx context.Context, target *Target, probe
 		}
 		return nil, wrappedErr
 	}
-
 	// 读取响应
 	response, err := s.readResponse(conn, options)
 	if len(response) > 0 {
 		target.StatusCheck.SetReadOK()
 	}
 	if err != nil {
+		gologger.Debug().Msgf("READ EOF for  [%s:%d]", target.IP, target.Port)
 		// 使用 HandleError 方法统一处理错误
 		shouldTerminate, wrappedErr := target.StatusCheck.HandleError(err, target)
 		if shouldTerminate {
@@ -273,7 +280,6 @@ func (s *ServiceScanner) createConnection(ctx context.Context, target *Target, t
 func (s *ServiceScanner) readResponse(conn net.Conn, options *ScanOptions) ([]byte, error) {
 	var responseData []byte
 	buffer := make([]byte, 1024)
-
 	// 设置最大读取时间
 	maxReadTime := time.Now().Add(options.Timeout)
 	for {
@@ -309,9 +315,11 @@ func (s *ServiceScanner) readResponse(conn net.Conn, options *ScanOptions) ([]by
 				break
 			}
 		}
-
 		// 处理错误
 		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return responseData, ErrEOF
+			}
 			err = ErrReadTimeout
 		}
 	}

@@ -132,13 +132,13 @@ func showHelp() {
 	fmt.Println("  xmap -target-file targets.txt -ports 80,443,8080-8090")
 	fmt.Println("  xmap -target 192.168.1.1 -fast -output results.json -json")
 	fmt.Println("\n选项:")
-	
+
 	// 使用简单的方式显示所有选项
 	fmt.Println("目标选项:")
 	fmt.Println("  -t, --target string        扫描目标，格式: ip:port 或 ip (使用默认端口)")
 	fmt.Println("  -l, --target-file string   包含扫描目标的文件，每行一个目标")
 	fmt.Println("  -p, --ports string         要扫描的端口，逗号分隔 (默认 \"80,443,8080\")")
-	
+
 	fmt.Println("\n扫描选项:")
 	fmt.Println("      --timeout int          扫描超时时间(秒) (默认 5)")
 	fmt.Println("  -r, --retries int          扫描重试次数 (默认 2)")
@@ -148,7 +148,7 @@ func showHelp() {
 	fmt.Println("      --probes string        要使用的探针名称，逗号分隔")
 	fmt.Println("      --ssl                  使用SSL")
 	fmt.Println("      --version-intensity int 版本检测强度(0-9) (默认 7)")
-	
+
 	fmt.Println("\nWeb扫描选项:")
 	fmt.Println("  -d, --fingerprint-path string 指纹库路径，默认使用内置路径")
 	fmt.Println("      --ur, --update-rule    更新指纹规则库")
@@ -156,7 +156,7 @@ func showHelp() {
 	fmt.Println("      --di, --disable-icon   禁用图标请求匹配")
 	fmt.Println("      --dj, --disable-js     禁用JavaScript规则匹配")
 	fmt.Println("      --debug-resp           调试HTTP响应")
-	
+
 	fmt.Println("\n输出选项:")
 	fmt.Println("  -o, --output string        输出结果到文件")
 	fmt.Println("  -j, --json                 以JSON格式输出")
@@ -164,7 +164,7 @@ func showHelp() {
 	fmt.Println("  -v, --verbose              显示详细信息")
 	fmt.Println("  -s, --silent               静默模式")
 	fmt.Println("      --no-progress          不显示进度条")
-	
+
 	fmt.Println("\n其他选项:")
 	fmt.Println("  -h, --help                 显示帮助信息")
 	fmt.Println("      --version              显示版本信息")
@@ -283,10 +283,10 @@ func main() {
 		ServiceDetection: true,
 		VersionDetection: true,
 		// Web扫描选项
-		Proxy:           proxyFlag,
-		DisableIcon:     disableIconFlag,
-		DisableJS:       disableJsFlag,
-		DebugResponse:   debugRespFlag,
+		Proxy:         proxyFlag,
+		DisableIcon:   disableIconFlag,
+		DisableJS:     disableJsFlag,
+		DebugResponse: debugRespFlag,
 	}
 
 	// 创建XMap实例
@@ -303,7 +303,7 @@ func main() {
 	// 创建上下文
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
+	println(xmapInstance, ctx, options)
 	// 处理中断信号
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, os.Interrupt)
@@ -312,64 +312,6 @@ func main() {
 		gologger.Info().Msg("接收到中断信号，正在停止扫描...")
 		cancel()
 	}()
-
-	// 创建任务
-	task := &model.ScanTask{
-		ID:        "cmd-task",
-		Targets:   targets,
-		Options:   options,
-		Status:    model.TaskStatusPending,
-		CreatedAt: time.Now(),
-	}
-
-	// 进度回调函数
-	progressCallback := func(progress *model.ScanProgress) {
-		if !silentFlag && !noProgressFlag {
-			fmt.Printf("\r进度: %.2f%% (%d/%d) - 成功: %d, 失败: %d, 预计剩余时间: %ds",
-				progress.Percentage,
-				progress.CompletedTargets,
-				progress.TotalTargets,
-				progress.SuccessTargets,
-				progress.FailedTargets,
-				progress.EstimatedTimeRemaining,
-			)
-		}
-	}
-
-	// 执行扫描
-	gologger.Info().Msgf("开始扫描 %d 个目标...", len(targets))
-	startTime := time.Now()
-
-	_, results, err := xmapInstance.ExecuteTaskWithProgress(ctx, task, progressCallback)
-	if err != nil {
-		gologger.Fatal().Msgf("扫描失败: %v", err)
-	}
-
-	// 输出结果
-	if !silentFlag && !noProgressFlag {
-		fmt.Println() // 换行
-	}
-	gologger.Info().Msgf("扫描完成，耗时: %s", time.Since(startTime))
-	gologger.Info().Msgf("扫描结果: 总计 %d 个目标，发现 %d 个服务", len(targets), countServices(results))
-
-	// 保存结果到文件
-	if outputFlag != "" {
-		var format string
-		if jsonFlag {
-			format = "json"
-		} else if csvFlag {
-			format = "csv"
-		} else {
-			format = "txt"
-		}
-
-		err := saveResults(results, outputFlag, format)
-		if err != nil {
-			gologger.Error().Msgf("保存结果失败: %v", err)
-		} else {
-			gologger.Info().Msgf("结果已保存到文件: %s", outputFlag)
-		}
-	}
 }
 
 // 解析端口
