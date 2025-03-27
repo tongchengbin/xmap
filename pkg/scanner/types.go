@@ -77,6 +77,8 @@ type ScanResult struct {
 	Target *Target
 	// 服务名称
 	Service string
+	// 是否使用SSL
+	SSL bool
 	// 附加信息
 	Extra map[string]interface{}
 	// 主机名

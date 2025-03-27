@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -188,7 +189,6 @@ func (x *XMap) Scan(ctx context.Context, target *model.ScanTarget, options ...*m
 	if err != nil {
 		return nil, err
 	}
-
 	// 转换结果
 	modelResult := x.convertResult(result, target)
 
@@ -197,13 +197,14 @@ func (x *XMap) Scan(ctx context.Context, target *model.ScanTarget, options ...*m
 		// 设置Web扫描器选项
 		x.webScanner.SetTimeout(time.Duration(opts.Timeout) * time.Second)
 		x.webScanner.SetDebugResponse(opts.DebugResponse)
-
 		// 设置代理
 		if opts.Proxy != "" {
 			x.webScanner.SetProxy(opts.Proxy)
 		}
 		// 执行Web扫描
-		webResult, err := x.webScanner.ScanWithContext(ctx, scannerTarget)
+		url := fmt.Sprintf("%s://%s:%d", modelResult.Service, modelResult.Target.IP, modelResult.Target.Port)
+		println("URL", url)
+		webResult, err := x.webScanner.ScanWithContext(ctx, url)
 		if err != nil {
 			gologger.Debug().Msgf("Web扫描失败: %v", err)
 		} else {
@@ -584,12 +585,13 @@ func (x *XMap) convertResult(result *scanner.ScanResult, target *model.ScanTarge
 	if result.Extra != nil && len(result.Extra) > 0 {
 		modelResult.Components = append(modelResult.Components, result.Extra)
 	}
-
+	if result.Service == "http" && result.SSL {
+		modelResult.Service = "https"
+	}
 	// 设置错误信息
 	if result.Error != nil {
 		modelResult.Error = result.Error.Error()
 	}
-
 	// 设置原始响应数据
 	if result.RawResponse != nil && len(result.RawResponse) > 0 {
 		modelResult.Metadata["tcp_banner"] = base64.StdEncoding.EncodeToString(result.RawResponse)

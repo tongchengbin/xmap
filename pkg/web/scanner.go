@@ -70,14 +70,7 @@ func ShouldScan(service string) bool {
 }
 
 // ScanWithContext 带上下文的Web扫描
-func (s *Scanner) ScanWithContext(ctx context.Context, target *scanner.Target) (*ScanResult, error) {
-	// 构建URL
-	scheme := "http"
-	if target.Port == 443 || target.Port == 8443 {
-		scheme = "https"
-	}
-	url := fmt.Sprintf("%s://%s:%d", scheme, target.IP, target.Port)
-
+func (s *Scanner) ScanWithContext(ctx context.Context, url string) (*ScanResult, error) {
 	// 获取指纹库
 	finger := rule.GetRuleManager().GetFinger()
 	if finger == nil {
@@ -91,15 +84,12 @@ func (s *Scanner) ScanWithContext(ctx context.Context, target *scanner.Target) (
 	banner, components, err := crawler.Match(url)
 	if err != nil {
 		return &ScanResult{
-			Target: target,
-			URL:    url,
-			Error:  err,
+			URL:   url,
+			Error: err,
 		}, err
 	}
-
 	// 返回结果
 	return &ScanResult{
-		Target:     target,
 		URL:        url,
 		Components: components,
 		Banner:     banner,

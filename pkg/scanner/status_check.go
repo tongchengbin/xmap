@@ -2,7 +2,6 @@ package scanner
 
 import (
 	"errors"
-	"fmt"
 	"github.com/projectdiscovery/gologger"
 )
 
@@ -85,7 +84,6 @@ func (p *PortStatusCheck) IsLikelyFirewalled() bool {
 // - 包装后的错误
 func (p *PortStatusCheck) HandleError(errType ErrorType, target *Target) bool {
 	// 解析错误类型
-	defer fmt.Printf("open: %d not match: %d read: %d write: %d ConsecutiveClose: %d\n", p.Open, p.NotMatch, p.ReadTimeout, p.WriteTimeout, p.ConsecutiveClose)
 	// 根据错误类型更新状态
 	switch errType {
 	case ErrNil:

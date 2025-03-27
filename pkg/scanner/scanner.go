@@ -174,17 +174,22 @@ func (s *ServiceScanner) executeProbes(ctx context.Context, target *Target, prob
 		if s.defaultOptions.DebugResponse && len(response) > 0 {
 			gologger.Print().Msgf("Read (%d bytes) for probe %s on %s:%d:\n%s", len(response), pb.Name, target.IP, target.Port, formatProbeData(response))
 		}
-		// 匹配响应
-		matchService, extra := pb.Match(response)
-		// 如果匹配成功
-		if matchService != nil {
-			gologger.Debug().Msgf("Matched probe %s on %s://%s:%d line on:%d", pb.Name, matchService.Service, target.IP, target.Port, matchService.Line)
-			result.Extra = extra
-			result.Service = matchService.Service
-			return nil
-		}
 		if len(response) > 0 {
+			// 匹配响应
 			target.StatusCheck.SetOpen()
+			matchService, extra := pb.Match(response)
+			// 如果匹配成功
+			if matchService != nil {
+				if useSSl {
+					gologger.Debug().Msgf("Matched probe %s on (ssl)%s://%s:%d line on:%d", pb.Name, matchService.Service, target.IP, target.Port, matchService.Line)
+				} else {
+					gologger.Debug().Msgf("Matched probe %s on %s://%s:%d line on:%d", pb.Name, matchService.Service, target.IP, target.Port, matchService.Line)
+				}
+				result.Extra = extra
+				result.Service = matchService.Service
+				result.SSL = useSSl
+				return nil
+			}
 		}
 		shouldTerminate := target.StatusCheck.HandleError(errType, target)
 		if shouldTerminate {
