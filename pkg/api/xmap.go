@@ -551,12 +551,10 @@ func (x *XMap) enrichResultWithWebData(result *model.ScanResult, webResult *web.
 			// 创建新的map[string]interface{}
 			componentInfo := make(map[string]interface{})
 			componentInfo["name"] = name
-
 			// 复制其他属性
 			for k, v := range ext {
 				componentInfo[k] = v
 			}
-
 			result.Components = append(result.Components, componentInfo)
 		}
 	}
