@@ -1,4 +1,33 @@
+# Binaries for programs and plugins
 *.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+xmap
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Dependency directories
+vendor/
+
+# IDE files
 .idea
 .vscode
 *~
+
+# Log files
+*.log
+
+# Output files
+*.json
+*.csv
+results/
+
+# OS specific files
+.DS_Store
+Thumbs.db

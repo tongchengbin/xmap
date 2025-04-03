@@ -2,7 +2,7 @@ module github.com/tongchengbin/xmap
 
 go 1.23
 
-toolchain go1.23.4
+toolchain go1.23.7
 
 require (
 	github.com/dlclark/regexp2 v1.11.4
