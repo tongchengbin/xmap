@@ -73,6 +73,10 @@ func ParseNetworkError(err error) ErrorType {
 		return ErrorEOF
 	} else if strings.Contains(err.Error(), "max read timeout") {
 		return ErrorTypeReadTimeout
+	} else if strings.Contains(err.Error(), "refused it") {
+		return ErrorTypeConnectionRefused
+	} else if strings.Contains(err.Error(), "i/o timeout") {
+		return ErrorTypeReadTimeout
 	} else {
 		println(">>>>>>>>>>>>>>", err, err.Error())
 		return ErrorTypeUnknown

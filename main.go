@@ -13,6 +13,7 @@ import (
 	"github.com/projectdiscovery/gologger/levels"
 	"github.com/tongchengbin/xmap/pkg/api"
 	"github.com/tongchengbin/xmap/pkg/model"
+	"github.com/tongchengbin/xmap/pkg/output"
 )
 
 var (
@@ -118,100 +119,15 @@ func init() {
 
 	// 解析命令行参数
 	if err := flagSet.Parse(); err != nil {
-		fmt.Println(err.Error())
+		fmt.Println("解析命令行参数失败:", err.Error())
 		os.Exit(1)
 	}
-}
-
-func showHelp() {
-	fmt.Printf(banner)
-	fmt.Println("\n使用方法:")
-	fmt.Println("  xmap [选项] -target <目标> 或 -target-file <目标文件>")
-	fmt.Println("\n示例:")
-	fmt.Println("  xmap -target 192.168.1.1")
-	fmt.Println("  xmap -target-file targets.txt -ports 80,443,8080-8090")
-	fmt.Println("  xmap -target 192.168.1.1 -fast -output results.json -json")
-	fmt.Println("\n选项:")
-
-	// 使用简单的方式显示所有选项
-	fmt.Println("目标选项:")
-	fmt.Println("  -t, --target string        扫描目标，格式: ip:port 或 ip (使用默认端口)")
-	fmt.Println("  -l, --target-file string   包含扫描目标的文件，每行一个目标")
-	fmt.Println("  -p, --ports string         要扫描的端口，逗号分隔 (默认 \"80,443,8080\")")
-
-	fmt.Println("\n扫描选项:")
-	fmt.Println("      --timeout int          扫描超时时间(秒) (默认 5)")
-	fmt.Println("  -r, --retries int          扫描重试次数 (默认 2)")
-	fmt.Println("  -c, --parallelism int      最大并行扫描数 (默认 100)")
-	fmt.Println("  -f, --fast                 使用快速模式")
-	fmt.Println("      --all-probes           使用所有探针")
-	fmt.Println("      --probes string        要使用的探针名称，逗号分隔")
-	fmt.Println("      --ssl                  使用SSL")
-	fmt.Println("      --version-intensity int 版本检测强度(0-9) (默认 7)")
-
-	fmt.Println("\nWeb扫描选项:")
-	fmt.Println("  -d, --fingerprint-path string 指纹库路径，默认使用内置路径")
-	fmt.Println("      --ur, --update-rule    更新指纹规则库")
-	fmt.Println("  -x, --proxy string         HTTP代理，格式: http://host:port")
-	fmt.Println("      --di, --disable-icon   禁用图标请求匹配")
-	fmt.Println("      --dj, --disable-js     禁用JavaScript规则匹配")
-	fmt.Println("      --debug-resp           调试HTTP响应")
-
-	fmt.Println("\n输出选项:")
-	fmt.Println("  -o, --output string        输出结果到文件")
-	fmt.Println("  -j, --json                 以JSON格式输出")
-	fmt.Println("      --csv                  以CSV格式输出")
-	fmt.Println("  -v, --verbose              显示详细信息")
-	fmt.Println("  -s, --silent               静默模式")
-	fmt.Println("      --no-progress          不显示进度条")
-
-	fmt.Println("\n其他选项:")
-	fmt.Println("  -h, --help                 显示帮助信息")
-	fmt.Println("      --version              显示版本信息")
-	fmt.Println("  -e, --examples             显示使用示例")
-}
-
-func showExamples() {
-	fmt.Printf(banner)
-	fmt.Println("\n使用示例:")
-	fmt.Println("1. 扫描单个目标:")
-	fmt.Println("   xmap -target 192.168.1.1")
-	fmt.Println("\n2. 扫描多个端口:")
-	fmt.Println("   xmap -target 192.168.1.1 -ports 80,443,8080-8090")
-	fmt.Println("\n3. 从文件读取目标:")
-	fmt.Println("   xmap -target-file targets.txt")
-	fmt.Println("\n4. 使用快速模式:")
-	fmt.Println("   xmap -target 192.168.1.1 -fast")
-	fmt.Println("\n5. 输出JSON格式结果:")
-	fmt.Println("   xmap -target 192.168.1.1 -output results.json -json")
-	fmt.Println("\n6. 使用特定探针:")
-	fmt.Println("   xmap -target 192.168.1.1 -probes http,https,ssh")
-	fmt.Println("\n7. 高并发扫描:")
-	fmt.Println("   xmap -target-file large-targets.txt -parallelism 500")
-	fmt.Println("\n8. 使用代理:")
-	fmt.Println("   xmap -target 192.168.1.1 -proxy http://127.0.0.1:8080")
-	fmt.Println("\n9. 更新指纹规则库:")
-	fmt.Println("   xmap -update-rule")
-	fmt.Println("\n10. 指定指纹库路径:")
-	fmt.Println("   xmap -target 192.168.1.1 -fingerprint-path ./fingerprints")
 }
 
 func main() {
 	// 显示版本信息
 	if versionInfoFlag {
 		fmt.Printf("XMap 版本: %s\n", version)
-		return
-	}
-
-	// 显示帮助信息
-	if helpFlag {
-		showHelp()
-		return
-	}
-
-	// 显示使用示例
-	if examplesFlag {
-		showExamples()
 		return
 	}
 
@@ -260,7 +176,6 @@ func main() {
 
 	if len(targets) == 0 {
 		gologger.Fatal().Msg("未指定扫描目标，使用 -target 或 -target-file 参数")
-		showHelp()
 		return
 	}
 
@@ -271,7 +186,7 @@ func main() {
 	}
 
 	// 创建扫描选项
-	options := &model.ScanOptions{
+	scanOptions := &model.ScanOptions{
 		Timeout:          timeoutFlag,
 		Retries:          retriesFlag,
 		UseSSL:           sslFlag,
@@ -303,7 +218,7 @@ func main() {
 	// 创建上下文
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	println(xmapInstance, ctx, options)
+
 	// 处理中断信号
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, os.Interrupt)
@@ -312,6 +227,51 @@ func main() {
 		gologger.Info().Msg("接收到中断信号，正在停止扫描...")
 		cancel()
 	}()
+
+	// 创建结果输出器
+	var outer output.Outer
+	if jsonFlag {
+		outer = output.NewJSONOuter(outputFlag)
+	} else if csvFlag {
+		outer = output.NewCSVOuter(outputFlag)
+	} else {
+		outer = output.NewConsoleOuter(outputFlag, silentFlag)
+	}
+
+	// 执行扫描
+	err = xmapInstance.ExecuteWithResultCallback(ctx, targets, scanOptions, 
+		// 进度回调
+		func(completed, total int, percentage float64, status string) {
+			if silentFlag || noProgressFlag {
+				return
+			}
+
+			// 计算成功和失败数量（简化实现）
+			success := completed
+			failed := 0
+
+			fmt.Printf("\r进度: %.2f%% (%d/%d) - 成功: %d, 失败: %d, 状态: %s",
+				percentage,
+				completed,
+				total,
+				success,
+				failed,
+				status,
+			)
+		},
+		// 结果回调 - 每当有一个结果就立即输出
+		func(result *model.ScanResult) {
+			// 使用输出器输出结果
+			err := outer.Output(result)
+			if err != nil {
+				gologger.Error().Msgf("输出结果失败: %v", err)
+			}
+		},
+	)
+	if err != nil {
+		gologger.Fatal().Msgf("扫描失败: %v", err)
+		return
+	}
 }
 
 // 解析端口
@@ -475,95 +435,4 @@ func parseIPPort(target string) (string, int, error) {
 
 	// 没有端口，只返回IP
 	return target, 0, nil
-}
-
-// 统计服务数量
-func countServices(results []*model.ScanResult) int {
-	count := 0
-	for _, result := range results {
-		if result.Service != "" {
-			count++
-		}
-	}
-	return count
-}
-
-// 打印结果
-func displayResults(results []*model.ScanResult) {
-	fmt.Println("\n扫描结果:")
-	fmt.Println("-------------------------------------------------------------------------------------------------------------------")
-	fmt.Printf("%-20s %-10s %-15s %-15s %-20s\n", "IP", "端口", "服务", "匹配探针", "匹配服务")
-	fmt.Println("-------------------------------------------------------------------------------------------------------------------")
-	for _, result := range results {
-		fmt.Printf("%-20s %-10d %-15s %-15s %-20s\n",
-			result.Target.IP,
-			result.Target.Port,
-			truncateString(result.Service, 15),
-			truncateString(result.MatchedProbe, 15),
-			truncateString(result.MatchedService, 20),
-		)
-	}
-	fmt.Println("-------------------------------------------------------------------------------------------------------------------")
-}
-
-// 截断字符串
-func truncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen-3] + "..."
-}
-
-// 打印JSON格式结果
-func printResultsJSON(results []*model.ScanResult) {
-	fmt.Println("[")
-	for i, result := range results {
-		jsonResult := fmt.Sprintf(`  {
-    "target": "%s:%d",
-    "protocol": "%s",
-    "service": "%s",
-    "matched_probe": "%s",
-    "duration": "%s"
-  }`,
-			result.Target.IP,
-			result.Target.Port,
-			result.Target.Protocol,
-			result.Service,
-			result.MatchedProbe,
-			result.Duration,
-		)
-		fmt.Print(jsonResult)
-		if i < len(results)-1 {
-			fmt.Println(",")
-		} else {
-			fmt.Println("")
-		}
-	}
-	fmt.Println("]")
-}
-
-// 保存结果到文件
-func saveResults(results []*model.ScanResult, filename string, format string) error {
-	file, err := os.Create(filename)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	// 重定向标准输出到文件
-	oldStdout := os.Stdout
-	os.Stdout = file
-
-	switch format {
-	case "json":
-		printResultsJSON(results)
-	case "csv":
-	default:
-		displayResults(results)
-	}
-
-	// 恢复标准输出
-	os.Stdout = oldStdout
-
-	return nil
 }
