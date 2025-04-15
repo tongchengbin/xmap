@@ -203,7 +203,6 @@ func (x *XMap) Scan(ctx context.Context, target *model.ScanTarget, options ...*m
 		}
 		// 执行Web扫描
 		url := fmt.Sprintf("%s://%s:%d", modelResult.Service, modelResult.Target.IP, modelResult.Target.Port)
-		println("URL", url)
 		webResult, err := x.webScanner.ScanWithContext(ctx, url)
 		if err != nil {
 			gologger.Debug().Msgf("Web扫描失败: %v", err)
