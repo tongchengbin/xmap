@@ -177,7 +177,6 @@ func (x *XMap) Scan(ctx context.Context, target *model.ScanTarget, options ...*m
 	if len(options) > 0 && options[0] != nil {
 		opts = options[0]
 	}
-
 	// 转换目标
 	scannerTarget := scanner.NewTarget(target.IP, target.Port, scanner.Protocol(target.Protocol))
 
@@ -328,7 +327,6 @@ func (x *XMap) ExecuteWithResultCallback(
 	ctx context.Context,
 	targets []*model.ScanTarget,
 	options *model.ScanOptions,
-	progressCallback func(completed, total int, percentage float64, status string),
 	resultCallback func(*model.ScanResult),
 ) error {
 	if options == nil {
@@ -338,7 +336,6 @@ func (x *XMap) ExecuteWithResultCallback(
 	if options.MaxParallelism <= 0 {
 		options.MaxParallelism = 10
 	}
-	totalTargets := len(targets)
 	// 创建上下文，支持取消
 	scanCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -346,42 +343,12 @@ func (x *XMap) ExecuteWithResultCallback(
 	sem := make(chan struct{}, options.MaxParallelism)
 	// 创建等待组
 	var wg sync.WaitGroup
-	// 进度跟踪变量
-	var progressMutex sync.Mutex
-	completedTargets := 0
-	successTargets := 0
-	failedTargets := 0
-	lastProgressUpdate := time.Now()
-	progressUpdateInterval := 500 * time.Millisecond
 	// 处理单个结果的函数
 	handleResult := func(result *model.ScanResult) {
 		// 如果提供了结果回调，则调用
 		if resultCallback != nil {
 			resultCallback(result)
 		}
-
-		// 更新进度
-		progressMutex.Lock()
-		completedTargets++
-		if result.Error == "" {
-			successTargets++
-		} else {
-			failedTargets++
-		}
-
-		percentage := float64(completedTargets) / float64(totalTargets) * 100
-		currentTime := time.Now()
-
-		// 调用进度回调
-		if progressCallback != nil && time.Since(lastProgressUpdate) >= progressUpdateInterval {
-			status := model.StatusRunning
-			if completedTargets == totalTargets {
-				status = model.StatusCompleted
-			}
-			progressCallback(completedTargets, totalTargets, percentage, status)
-			lastProgressUpdate = currentTime
-		}
-		progressMutex.Unlock()
 	}
 	// 启动扫描协程
 	for i, target := range targets {
@@ -413,15 +380,8 @@ func (x *XMap) ExecuteWithResultCallback(
 			handleResult(result)
 		}(i, target)
 	}
-
 	// 等待所有扫描完成
 	wg.Wait()
-
-	// 最后一次进度更新
-	if progressCallback != nil && completedTargets == totalTargets {
-		progressCallback(completedTargets, totalTargets, 100, model.StatusCompleted)
-	}
-
 	return nil
 }
 
