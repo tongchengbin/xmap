@@ -83,7 +83,7 @@ func (s *ServiceScanner) ScanWithContext(ctx context.Context, target *Target, op
 	if scanOptions.MaxTimeout > 0 {
 		// ctx 包裹
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, scanOptions.Timeout)
+		ctx, cancel = context.WithTimeout(ctx, scanOptions.MaxTimeout)
 		defer cancel()
 	}
 	// 对探针进行排序，优先使用适合当前端口的探针
