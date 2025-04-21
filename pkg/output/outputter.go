@@ -5,13 +5,13 @@ import (
 	"github.com/projectdiscovery/gologger"
 	"os"
 
-	"github.com/tongchengbin/xmap/pkg/model"
+	"github.com/tongchengbin/xmap/pkg/types"
 )
 
 // Outer 定义结果输出接口
 type Outer interface {
 	// Output 输出扫描结果
-	Output(results *model.ScanResult) error
+	Output(results *types.ScanResult) error
 }
 
 // ConsoleOuter 控制台输出实现
@@ -29,7 +29,7 @@ func NewConsoleOuter(outputFile string, silent bool) *ConsoleOuter {
 }
 
 // Output 实现Outer接口
-func (o *ConsoleOuter) Output(results *model.ScanResult) error {
+func (o *ConsoleOuter) Output(results *types.ScanResult) error {
 	if o.Silent {
 		return nil
 	}
@@ -56,7 +56,7 @@ func (o *ConsoleOuter) Output(results *model.ScanResult) error {
 }
 
 // displayResults 显示结果
-func (o *ConsoleOuter) displayResults(result *model.ScanResult) {
+func (o *ConsoleOuter) displayResults(result *types.ScanResult) {
 	gologger.Print().Msgf("%s://%s:%d components: %s\n", result.Service, result.Target.IP, result.Target.Port, ComponentsToString(result.Components))
 }
 
@@ -73,7 +73,7 @@ func NewJSONOuter(outputFile string) *JSONOuter {
 }
 
 // Output 实现Outputter接口
-func (o *JSONOuter) Output(results *model.ScanResult) error {
+func (o *JSONOuter) Output(results *types.ScanResult) error {
 	// 如果指定了输出文件，则输出到文件
 	if o.OutputFile != "" {
 		file, err := os.Create(o.OutputFile)
@@ -96,7 +96,7 @@ func (o *JSONOuter) Output(results *model.ScanResult) error {
 }
 
 // printJSON 打印JSON格式结果
-func (o *JSONOuter) printJSON(results *model.ScanResult) {
+func (o *JSONOuter) printJSON(results *types.ScanResult) {
 	fmt.Println(results.JSON())
 }
 
@@ -113,7 +113,7 @@ func NewCSVOuter(outputFile string) *CSVOuter {
 }
 
 // Output 实现Outer接口
-func (o *CSVOuter) Output(results *model.ScanResult) error {
+func (o *CSVOuter) Output(results *types.ScanResult) error {
 	// 如果指定了输出文件，则输出到文件
 	if o.OutputFile != "" {
 		file, err := os.Create(o.OutputFile)
@@ -136,7 +136,7 @@ func (o *CSVOuter) Output(results *model.ScanResult) error {
 }
 
 // printCSV 打印CSV格式结果
-func (o *CSVOuter) printCSV(results *model.ScanResult) {
+func (o *CSVOuter) printCSV(results *types.ScanResult) {
 	// 打印CSV头
 	fmt.Println("IP,Port,Protocol,Service,MatchedProbe,MatchedService,Duration")
 }

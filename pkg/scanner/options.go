@@ -12,8 +12,6 @@ type ScanOptions struct {
 	Timeout time.Duration
 	// 重试次数
 	Retries int
-	// 是否使用SSL
-	UseSSL bool
 	// 版本检测强度(0-9)
 	VersionIntensity int
 	// 是否进行主机发现
@@ -53,9 +51,9 @@ type ScanOptions struct {
 // DefaultScanOptions 返回默认扫描选项
 func DefaultScanOptions() *ScanOptions {
 	return &ScanOptions{
+		MaxTimeout:           180 * time.Second,
 		Timeout:              6 * time.Second,
 		Retries:              2,
-		UseSSL:               false,
 		VersionIntensity:     7,
 		HostDiscovery:        true,
 		MaxParallelism:       100,
@@ -88,13 +86,6 @@ func WithTimeout(timeout time.Duration) ScanOption {
 func WithRetries(retries int) ScanOption {
 	return func(o *ScanOptions) {
 		o.Retries = retries
-	}
-}
-
-// WithSSL 设置是否使用SSL
-func WithSSL(useSSL bool) ScanOption {
-	return func(o *ScanOptions) {
-		o.UseSSL = useSSL
 	}
 }
 

@@ -13,8 +13,8 @@ import (
 	"github.com/tongchengbin/xmap/pkg/scanner"
 
 	"github.com/projectdiscovery/gologger"
-	"github.com/tongchengbin/xmap/pkg/model"
 	"github.com/tongchengbin/xmap/pkg/probe"
+	"github.com/tongchengbin/xmap/pkg/types"
 	"github.com/tongchengbin/xmap/pkg/web"
 )
 
@@ -161,9 +161,9 @@ func WithVerbose(verbose bool) Option {
 }
 
 // Scan 扫描单个目标
-func (x *XMap) Scan(ctx context.Context, target *model.ScanTarget, options ...*model.ScanOptions) (*model.ScanResult, error) {
+func (x *XMap) Scan(ctx context.Context, target *types.ScanTarget, options ...*types.ScanOptions) (*types.ScanResult, error) {
 	// 使用默认选项
-	opts := &model.ScanOptions{
+	opts := &types.ScanOptions{
 		Timeout:          int(x.defaultOptions.Timeout.Seconds()),
 		Retries:          x.defaultOptions.Retries,
 		VersionIntensity: x.defaultOptions.VersionIntensity,
@@ -215,9 +215,9 @@ func (x *XMap) Scan(ctx context.Context, target *model.ScanTarget, options ...*m
 }
 
 // ExecuteWithOptions 使用指定选项执行批量扫描
-func (x *XMap) ExecuteWithOptions(ctx context.Context, targets []*model.ScanTarget, options *model.ScanOptions, progressCallback func(completed, total int, percentage float64, status string)) ([]*model.ScanResult, error) {
+func (x *XMap) ExecuteWithOptions(ctx context.Context, targets []*types.ScanTarget, options *types.ScanOptions, progressCallback func(completed, total int, percentage float64, status string)) ([]*types.ScanResult, error) {
 	if options == nil {
-		options = &model.ScanOptions{}
+		options = &types.ScanOptions{}
 	}
 
 	// 设置默认并行数
@@ -235,24 +235,21 @@ func (x *XMap) ExecuteWithOptions(ctx context.Context, targets []*model.ScanTarg
 	sem := make(chan struct{}, options.MaxParallelism)
 
 	// 创建结果通道和等待组
-	resultChan := make(chan *model.ScanResult, options.MaxParallelism*2)
+	resultChan := make(chan *types.ScanResult, options.MaxParallelism*2)
 	var wg sync.WaitGroup
 
 	// 启动结果收集协程
-	results := make([]*model.ScanResult, 0, totalTargets)
+	results := make([]*types.ScanResult, 0, totalTargets)
 	done := make(chan struct{})
 
 	// 进度跟踪变量
 	completedTargets := 0
 	successTargets := 0
 	failedTargets := 0
-	lastProgressUpdate := time.Now()
-	progressUpdateInterval := 500 * time.Millisecond
 
 	go func() {
 		for result := range resultChan {
 			results = append(results, result)
-
 			// 更新进度
 			completedTargets++
 			if result.Error == "" {
@@ -261,18 +258,6 @@ func (x *XMap) ExecuteWithOptions(ctx context.Context, targets []*model.ScanTarg
 				failedTargets++
 			}
 
-			percentage := float64(completedTargets) / float64(totalTargets) * 100
-			currentTime := time.Now()
-
-			// 调用进度回调
-			if progressCallback != nil && time.Since(lastProgressUpdate) >= progressUpdateInterval {
-				status := model.StatusRunning
-				if completedTargets == totalTargets {
-					status = model.StatusCompleted
-				}
-				progressCallback(completedTargets, totalTargets, percentage, status)
-				lastProgressUpdate = currentTime
-			}
 		}
 		close(done)
 	}()
@@ -282,7 +267,7 @@ func (x *XMap) ExecuteWithOptions(ctx context.Context, targets []*model.ScanTarg
 		wg.Add(1)
 		sem <- struct{}{} // 获取信号量
 
-		go func(i int, target *model.ScanTarget) {
+		go func(i int, target *types.ScanTarget) {
 			defer func() {
 				<-sem // 释放信号量
 				wg.Done()
@@ -290,7 +275,7 @@ func (x *XMap) ExecuteWithOptions(ctx context.Context, targets []*model.ScanTarg
 
 			// 检查上下文是否已取消
 			if scanCtx.Err() != nil {
-				resultChan <- &model.ScanResult{
+				resultChan <- &types.ScanResult{
 					Target: target,
 					Error:  "scan canceled",
 				}
@@ -300,7 +285,7 @@ func (x *XMap) ExecuteWithOptions(ctx context.Context, targets []*model.ScanTarg
 			// 执行扫描
 			result, err := x.Scan(scanCtx, target, options)
 			if err != nil {
-				resultChan <- &model.ScanResult{
+				resultChan <- &types.ScanResult{
 					Target: target,
 					Error:  err.Error(),
 				}
@@ -325,12 +310,12 @@ func (x *XMap) ExecuteWithOptions(ctx context.Context, targets []*model.ScanTarg
 // ExecuteWithResultCallback 使用指定选项执行批量扫描，并实时回调每个扫描结果
 func (x *XMap) ExecuteWithResultCallback(
 	ctx context.Context,
-	targets []*model.ScanTarget,
-	options *model.ScanOptions,
-	resultCallback func(*model.ScanResult),
+	targets []*types.ScanTarget,
+	options *types.ScanOptions,
+	resultCallback func(*types.ScanResult),
 ) error {
 	if options == nil {
-		options = &model.ScanOptions{}
+		options = &types.ScanOptions{}
 	}
 	// 设置默认并行数
 	if options.MaxParallelism <= 0 {
@@ -344,7 +329,7 @@ func (x *XMap) ExecuteWithResultCallback(
 	// 创建等待组
 	var wg sync.WaitGroup
 	// 处理单个结果的函数
-	handleResult := func(result *model.ScanResult) {
+	handleResult := func(result *types.ScanResult) {
 		// 如果提供了结果回调，则调用
 		if resultCallback != nil {
 			resultCallback(result)
@@ -354,14 +339,14 @@ func (x *XMap) ExecuteWithResultCallback(
 	for i, target := range targets {
 		wg.Add(1)
 		sem <- struct{}{} // 获取信号量
-		go func(i int, target *model.ScanTarget) {
+		go func(i int, target *types.ScanTarget) {
 			defer func() {
 				<-sem // 释放信号量
 				wg.Done()
 			}()
 			// 检查上下文是否已取消
 			if scanCtx.Err() != nil {
-				result := &model.ScanResult{
+				result := &types.ScanResult{
 					Target: target,
 					Error:  "scan canceled",
 				}
@@ -371,7 +356,7 @@ func (x *XMap) ExecuteWithResultCallback(
 			// 执行扫描
 			result, err := x.Scan(scanCtx, target, options)
 			if err != nil {
-				result = &model.ScanResult{
+				result = &types.ScanResult{
 					Target: target,
 					Error:  err.Error(),
 				}
@@ -386,7 +371,7 @@ func (x *XMap) ExecuteWithResultCallback(
 }
 
 // createScanOptions 创建扫描选项
-func (x *XMap) createScanOptions(options *model.ScanOptions) []scanner.ScanOption {
+func (x *XMap) createScanOptions(options *types.ScanOptions) []scanner.ScanOption {
 	var scanOptions []scanner.ScanOption
 
 	if options == nil {
@@ -402,9 +387,6 @@ func (x *XMap) createScanOptions(options *model.ScanOptions) []scanner.ScanOptio
 	if options.Retries > 0 {
 		scanOptions = append(scanOptions, scanner.WithRetries(options.Retries))
 	}
-
-	// 设置SSL
-	scanOptions = append(scanOptions, scanner.WithSSL(options.UseSSL))
 
 	// 设置版本检测强度
 	if options.VersionIntensity >= 0 && options.VersionIntensity <= 9 {
@@ -460,7 +442,7 @@ func (x *XMap) createScanOptions(options *model.ScanOptions) []scanner.ScanOptio
 }
 
 // enrichResultWithWebData 使用Web扫描数据丰富扫描结果
-func (x *XMap) enrichResultWithWebData(result *model.ScanResult, webResult *web.ScanResult) {
+func (x *XMap) enrichResultWithWebData(result *types.ScanResult, webResult *web.ScanResult) {
 	if result == nil || webResult == nil {
 		return
 	}
@@ -520,14 +502,14 @@ func (x *XMap) enrichResultWithWebData(result *model.ScanResult, webResult *web.
 }
 
 // convertResult 转换扫描结果
-func (x *XMap) convertResult(result *scanner.ScanResult, target *model.ScanTarget) *model.ScanResult {
+func (x *XMap) convertResult(result *scanner.ScanResult, target *types.ScanTarget) *types.ScanResult {
 	if result == nil {
 		return nil
 	}
 
 	// 创建模型结果
-	modelResult := &model.ScanResult{
-		Target: &model.ScanTarget{
+	modelResult := &types.ScanResult{
+		Target: &types.ScanTarget{
 			IP:       target.IP,
 			Port:     target.Port,
 			Protocol: target.Protocol,
@@ -558,7 +540,7 @@ func (x *XMap) convertResult(result *scanner.ScanResult, target *model.ScanTarge
 }
 
 // ExecuteWithTargetsString 使用目标字符串执行批量扫描
-func (x *XMap) ExecuteWithTargetsString(ctx context.Context, targetsStr string, options *model.ScanOptions, progressCallback func(completed, total int, percentage float64, status string)) ([]*model.ScanResult, error) {
+func (x *XMap) ExecuteWithTargetsString(ctx context.Context, targetsStr string, options *types.ScanOptions, progressCallback func(completed, total int, percentage float64, status string)) ([]*types.ScanResult, error) {
 	// 解析目标字符串
 	targets, err := x.ParseTargetsString(targetsStr)
 	if err != nil {
@@ -570,9 +552,9 @@ func (x *XMap) ExecuteWithTargetsString(ctx context.Context, targetsStr string, 
 }
 
 // ParseTargetsString 将目标字符串解析为ScanTarget切片
-func (x *XMap) ParseTargetsString(targetsStr string) ([]*model.ScanTarget, error) {
+func (x *XMap) ParseTargetsString(targetsStr string) ([]*types.ScanTarget, error) {
 	lines := strings.Split(targetsStr, "\n")
-	targets := make([]*model.ScanTarget, 0, len(lines))
+	targets := make([]*types.ScanTarget, 0, len(lines))
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -605,7 +587,7 @@ func (x *XMap) ParseTargetsString(targetsStr string) ([]*model.ScanTarget, error
 			}
 		}
 
-		target := &model.ScanTarget{
+		target := &types.ScanTarget{
 			IP:       ip,
 			Port:     port,
 			Protocol: protocol,

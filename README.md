@@ -77,40 +77,40 @@ xmap -target 192.168.1.1 -output results.json -json
 package main
 
 import (
-    "context"
-    "fmt"
-    "time"
-    
-    "github.com/tongchengbin/xmap/pkg/api"
-    "github.com/tongchengbin/xmap/pkg/model"
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/tongchengbin/xmap/pkg/api"
+	"github.com/tongchengbin/xmap/pkg/types"
 )
 
 func main() {
-    // 创建XMap实例
-    xmap := api.NewXMap(
-        api.WithTimeout(5*time.Second),
-        api.WithRetries(2),
-        api.WithVersionIntensity(7),
-    )
-    
-    // 创建扫描目标
-    target := &model.ScanTarget{
-        IP:       "192.168.1.1",
-        Port:     80,
-        Protocol: "tcp",
-    }
-    
-    // 执行扫描
-    ctx := context.Background()
-    result, err := xmap.Scan(ctx, target)
-    if err != nil {
-        fmt.Printf("扫描失败: %v\n", err)
-        return
-    }
-    
-    // 处理结果
-    fmt.Printf("IP: %s, 端口: %d, 服务: %s, 版本: %s\n",
-        result.IP, result.Port, result.Service, result.Version)
+	// 创建XMap实例
+	xmap := api.NewXMap(
+		api.WithTimeout(5*time.Second),
+		api.WithRetries(2),
+		api.WithVersionIntensity(7),
+	)
+
+	// 创建扫描目标
+	target := &model.ScanTarget{
+		IP:       "192.168.1.1",
+		Port:     80,
+		Protocol: "tcp",
+	}
+
+	// 执行扫描
+	ctx := context.Background()
+	result, err := xmap.Scan(ctx, target)
+	if err != nil {
+		fmt.Printf("扫描失败: %v\n", err)
+		return
+	}
+
+	// 处理结果
+	fmt.Printf("IP: %s, 端口: %d, 服务: %s, 版本: %s\n",
+		result.IP, result.Port, result.Service, result.Version)
 }
 ```
 

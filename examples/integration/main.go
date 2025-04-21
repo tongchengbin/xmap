@@ -10,7 +10,7 @@ import (
 	"github.com/projectdiscovery/gologger"
 	"github.com/projectdiscovery/gologger/levels"
 	"github.com/tongchengbin/xmap/pkg/api"
-	"github.com/tongchengbin/xmap/pkg/model"
+	"github.com/tongchengbin/xmap/pkg/types"
 )
 
 func main() {
@@ -45,11 +45,10 @@ func main() {
 // 单个目标扫描示例
 func singleScanExample(xmapInstance *api.XMap) {
 	// 创建目标
-	target := &model.ScanTarget{
+	target := &types.ScanTarget{
 		IP:       "192.168.1.1",
 		Port:     80,
 		Protocol: "tcp",
-		ID:       "target-001",
 	}
 
 	// 执行扫描
@@ -67,18 +66,16 @@ func singleScanExample(xmapInstance *api.XMap) {
 // 批量扫描示例
 func batchScanExample(xmapInstance *api.XMap) {
 	// 创建扫描目标
-	targets := []*model.ScanTarget{
+	targets := []*types.ScanTarget{
 		{
 			IP:       "example.com",
 			Port:     80,
 			Protocol: "tcp",
-			ID:       "target-001",
 		},
 		{
 			IP:       "example.org",
 			Port:     443,
 			Protocol: "tcp",
-			ID:       "target-002",
 		},
 	}
 
@@ -103,41 +100,38 @@ func batchScanExample(xmapInstance *api.XMap) {
 // 任务执行与进度报告示例
 func taskWithProgressExample(xmapInstance *api.XMap) {
 	// 创建扫描任务
-	task := &model.ScanTask{
+	task := &types.ScanTask{
 		ID: "task-001",
-		Targets: []*model.ScanTarget{
+		Targets: []*types.ScanTarget{
 			{
 				IP:       "example.com",
 				Port:     80,
 				Protocol: "tcp",
-				ID:       "target-001",
 			},
 			{
 				IP:       "example.org",
 				Port:     443,
 				Protocol: "tcp",
-				ID:       "target-002",
 			},
 			{
 				IP:       "example.net",
 				Port:     8080,
 				Protocol: "tcp",
-				ID:       "target-003",
 			},
 		},
-		Options: &model.ScanOptions{
+		Options: &types.ScanOptions{
 			Timeout:          5,
 			Retries:          2,
 			VersionIntensity: 7,
 			FastMode:         true,
 			MaxParallelism:   10,
 		},
-		Status:    model.TaskStatusPending,
+		Status:    types.TaskStatusPending,
 		CreatedAt: time.Now(),
 	}
 
 	// 进度回调函数
-	progressCallback := func(progress *model.ScanProgress) {
+	progressCallback := func(progress *types.ScanProgress) {
 		fmt.Printf("\r进度: %.2f%% (%d/%d) - 成功: %d, 失败: %d, 预计剩余时间: %ds",
 			progress.Percentage,
 			progress.CompletedTargets,
@@ -211,7 +205,7 @@ type RiskScheduleScanTask struct {
 	Name        string             `json:"name"`
 	Description string             `json:"description"`
 	Targets     []string           `json:"targets"`
-	Options     *model.ScanOptions `json:"options"`
+	Options     *types.ScanOptions `json:"options"`
 	CreatedAt   time.Time          `json:"created_at"`
 }
 
@@ -225,29 +219,27 @@ type RiskScheduleScanResult struct {
 	StartTime          time.Time           `json:"start_time"`
 	EndTime            time.Time           `json:"end_time"`
 	Duration           time.Duration       `json:"duration"`
-	Results            []*model.ScanResult `json:"results"`
+	Results            []*types.ScanResult `json:"results"`
 }
 
 // Execute 执行risk-schedule扫描任务
 func (e *XMapExecutor) Execute(ctx context.Context, task *RiskScheduleScanTask) (*RiskScheduleScanResult, error) {
 	// 1. 将risk-schedule任务转换为XMap任务
-	targets := make([]*model.ScanTarget, 0, len(task.Targets))
+	targets := make([]*types.ScanTarget, 0, len(task.Targets))
 	for i, targetStr := range task.Targets {
 		// 这里简化了目标解析逻辑，实际应用中需要更复杂的解析
-		target := &model.ScanTarget{
+		target := &types.ScanTarget{
 			IP:       targetStr,
 			Port:     80, // 默认端口
 			Protocol: "tcp",
-			ID:       fmt.Sprintf("target-%03d", i+1),
 		}
 		targets = append(targets, target)
 	}
 
-	xmapTask := &model.ScanTask{
-		ID:        task.ID,
+	xmapTask := &types.ScanTask{
 		Targets:   targets,
 		Options:   task.Options,
-		Status:    model.TaskStatusPending,
+		Status:    types.TaskStatusPending,
 		CreatedAt: task.CreatedAt,
 		Metadata: map[string]interface{}{
 			"name":        task.Name,
@@ -292,7 +284,7 @@ func createMockScanTask() *RiskScheduleScanTask {
 		Name:        "示例扫描任务",
 		Description: "这是一个示例扫描任务，用于展示XMap与risk-schedule的集成",
 		Targets:     []string{"example.com", "example.org", "example.net"},
-		Options: &model.ScanOptions{
+		Options: &types.ScanOptions{
 			Timeout:          5,
 			Retries:          2,
 			VersionIntensity: 7,
@@ -304,7 +296,7 @@ func createMockScanTask() *RiskScheduleScanTask {
 }
 
 // printResult 打印扫描结果
-func printResult(result *model.ScanResult) {
+func printResult(result *types.ScanResult) {
 	fmt.Printf("目标: %s:%d\n", result.Target.IP, result.Target.Port)
 	fmt.Printf("服务: %s\n", result.Service)
 

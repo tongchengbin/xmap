@@ -1,4 +1,4 @@
-package model
+package types
 
 import (
 	"encoding/json"
@@ -6,8 +6,6 @@ import (
 
 // ScanTarget 表示扫描目标
 type ScanTarget struct {
-	// 目标ID
-	ID string `json:"id,omitempty"`
 	// IP地址
 	IP string `json:"ip"`
 	// 端口
@@ -52,6 +50,8 @@ func (r *ScanResult) JSON() string {
 
 // ScanOptions 表示扫描选项
 type ScanOptions struct {
+	// max timeout
+	MaxTimeout int `json:"max_timeout"`
 	// 超时时间(秒)
 	Timeout int `json:"timeout,omitempty"`
 	// 重试次数
@@ -86,7 +86,7 @@ type ScanOptions struct {
 	ProductNameDetection bool `json:"product_name_detection,omitempty"`
 	// 是否使用信息检测
 	InfoDetection bool `json:"info_detection,omitempty"`
-	
+
 	// Web扫描相关选项
 	// HTTP代理
 	Proxy string `json:"proxy,omitempty"`
@@ -97,17 +97,3 @@ type ScanOptions struct {
 	// 是否调试HTTP响应
 	DebugResponse bool `json:"debug_response,omitempty"`
 }
-
-// 常量定义
-const (
-	// StatusPending 表示等待中
-	StatusPending = "pending"
-	// StatusRunning 表示运行中
-	StatusRunning = "running"
-	// StatusCompleted 表示已完成
-	StatusCompleted = "completed"
-	// StatusFailed 表示失败
-	StatusFailed = "failed"
-	// StatusCanceled 表示已取消
-	StatusCanceled = "canceled"
-)

@@ -10,7 +10,7 @@ import (
 	"github.com/projectdiscovery/gologger"
 	"github.com/projectdiscovery/gologger/levels"
 	"github.com/tongchengbin/xmap/pkg/api"
-	"github.com/tongchengbin/xmap/pkg/model"
+	"github.com/tongchengbin/xmap/pkg/types"
 )
 
 func main() {
@@ -46,15 +46,14 @@ func main() {
 	)
 
 	// 创建扫描目标
-	scanTarget := &model.ScanTarget{
+	scanTarget := &types.ScanTarget{
 		IP:       target,
 		Port:     port,
 		Protocol: "tcp",
-		ID:       fmt.Sprintf("%s:%d", target, port),
 	}
 
 	// 创建扫描选项
-	options := &model.ScanOptions{
+	options := &types.ScanOptions{
 		Timeout:          5,
 		Retries:          2,
 		UseSSL:           useSSL,
@@ -82,7 +81,7 @@ func main() {
 }
 
 // 打印扫描结果
-func printResult(result *model.ScanResult) {
+func printResult(result *types.ScanResult) {
 	fmt.Println("扫描结果:")
 	fmt.Println("----------------------------------------")
 	fmt.Printf("目标:     %s:%d\n", result.Target.IP, result.Target.Port)

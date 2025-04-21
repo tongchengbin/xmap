@@ -14,7 +14,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/tongchengbin/xmap/pkg/api"
-	"github.com/tongchengbin/xmap/pkg/model"
+	"github.com/tongchengbin/xmap/pkg/types"
 )
 
 // TestProtocolDetection 测试协议检测功能
@@ -183,7 +183,7 @@ func TestProtocolDetection(t *testing.T) {
 
 			// 创建扫描目标
 			// 注意：不预先设置UseSSL，让XMap自动检测是否需要SSL
-			target := &model.ScanTarget{
+			target := &types.ScanTarget{
 				IP:       server.GetIP(),
 				Port:     server.GetPort(),
 				Protocol: "tcp",
@@ -335,7 +335,7 @@ func TestSSHScan(t *testing.T) {
 		api.WithVerbose(true),
 	)
 	ctx := context.Background()
-	result, err := xmap.Scan(ctx, &model.ScanTarget{
+	result, err := xmap.Scan(ctx, &types.ScanTarget{
 		IP:       server.GetIP(),
 		Port:     server.GetPort(),
 		Protocol: string(scanner.TCP),
@@ -364,7 +364,7 @@ func TestHTTPScan(t *testing.T) {
 		api.WithVerbose(true),
 	)
 	ctx := context.Background()
-	result, err := xmap.Scan(ctx, &model.ScanTarget{
+	result, err := xmap.Scan(ctx, &types.ScanTarget{
 		IP:       server.GetIP(),
 		Port:     server.GetPort(),
 		Protocol: string(scanner.TCP),
@@ -394,7 +394,7 @@ func TestTimeoutScan(t *testing.T) {
 		api.WithVerbose(true),
 	)
 	ctx := context.Background()
-	result, err := xmap.Scan(ctx, &model.ScanTarget{
+	result, err := xmap.Scan(ctx, &types.ScanTarget{
 		IP:       server.GetIP(),
 		Port:     server.GetPort(),
 		Protocol: string(scanner.TCP),
@@ -415,7 +415,7 @@ func TestRemoteWaf(t *testing.T) {
 		api.WithVerbose(true),
 	)
 	ctx := context.Background()
-	result, err := xmap.Scan(ctx, &model.ScanTarget{
+	result, err := xmap.Scan(ctx, &types.ScanTarget{
 		IP:       "frp.lostpeach.cn",
 		Port:     443,
 		Protocol: string(scanner.TCP),
@@ -434,7 +434,7 @@ func TestScanWithWaf(t *testing.T) {
 		api.WithVerbose(true),
 	)
 	ctx := context.Background()
-	result, err := xmap.Scan(ctx, &model.ScanTarget{
+	result, err := xmap.Scan(ctx, &types.ScanTarget{
 		IP:       "frp.lostpeach.cn",
 		Port:     3001,
 		Protocol: string(scanner.TCP),

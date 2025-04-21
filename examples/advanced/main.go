@@ -12,7 +12,7 @@ import (
 	"github.com/projectdiscovery/gologger"
 	"github.com/projectdiscovery/gologger/levels"
 	"github.com/tongchengbin/xmap/pkg/api"
-	"github.com/tongchengbin/xmap/pkg/model"
+	"github.com/tongchengbin/xmap/pkg/types"
 )
 
 func main() {
@@ -28,27 +28,24 @@ func main() {
 	)
 
 	// 创建示例目标
-	targets := []*model.ScanTarget{
+	targets := []*types.ScanTarget{
 		// HTTP服务
 		{
 			IP:       "example.com",
 			Port:     80,
 			Protocol: "tcp",
-			ID:       "http-target",
 		},
 		// HTTPS服务
 		{
 			IP:       "example.com",
 			Port:     443,
 			Protocol: "tcp",
-			ID:       "https-target",
 		},
 		// SSH服务
 		{
 			IP:       "example.com",
 			Port:     22,
 			Protocol: "tcp",
-			ID:       "ssh-target",
 		},
 	}
 
@@ -83,9 +80,9 @@ func main() {
 }
 
 // 示例1：展示不同的扫描选项
-func demonstrateScanOptions(ctx context.Context, xmap *api.XMap, target *model.ScanTarget) {
+func demonstrateScanOptions(ctx context.Context, xmap *api.XMap, target *types.ScanTarget) {
 	fmt.Println("1.1 使用快速模式（只使用常用探针）")
-	fastOptions := &model.ScanOptions{
+	fastOptions := &types.ScanOptions{
 		Timeout:          3,
 		Retries:          1,
 		VersionIntensity: 5,
@@ -99,7 +96,7 @@ func demonstrateScanOptions(ctx context.Context, xmap *api.XMap, target *model.S
 	}
 
 	fmt.Println("\n1.2 使用全面模式（使用所有探针）")
-	thoroughOptions := &model.ScanOptions{
+	thoroughOptions := &types.ScanOptions{
 		Timeout:          10,
 		Retries:          2,
 		VersionIntensity: 9,
@@ -114,7 +111,7 @@ func demonstrateScanOptions(ctx context.Context, xmap *api.XMap, target *model.S
 	}
 
 	fmt.Println("\n1.3 使用自定义超时和重试")
-	customOptions := &model.ScanOptions{
+	customOptions := &types.ScanOptions{
 		Timeout:          1, // 非常短的超时
 		Retries:          5, // 多次重试
 		VersionIntensity: 7,
@@ -129,10 +126,10 @@ func demonstrateScanOptions(ctx context.Context, xmap *api.XMap, target *model.S
 }
 
 // 示例2：展示自定义探针选择
-func demonstrateCustomProbes(ctx context.Context, xmap *api.XMap, targets []*model.ScanTarget) {
+func demonstrateCustomProbes(ctx context.Context, xmap *api.XMap, targets []*types.ScanTarget) {
 	// 2.1 只使用HTTP探针
 	fmt.Println("2.1 只使用HTTP探针")
-	httpOptions := &model.ScanOptions{
+	httpOptions := &types.ScanOptions{
 		Timeout:          5,
 		Retries:          2,
 		VersionIntensity: 7,
@@ -151,7 +148,7 @@ func demonstrateCustomProbes(ctx context.Context, xmap *api.XMap, targets []*mod
 
 	// 2.2 只使用SSL探针
 	fmt.Println("\n2.2 只使用SSL探针")
-	sslOptions := &model.ScanOptions{
+	sslOptions := &types.ScanOptions{
 		Timeout:          5,
 		Retries:          2,
 		VersionIntensity: 7,
@@ -188,7 +185,7 @@ func demonstrateCustomProbes(ctx context.Context, xmap *api.XMap, targets []*mod
 			probeNames = []string{"NULL"}
 		}
 
-		portOptions := &model.ScanOptions{
+		portOptions := &types.ScanOptions{
 			Timeout:          5,
 			Retries:          2,
 			VersionIntensity: 7,
@@ -209,18 +206,17 @@ func demonstrateCustomProbes(ctx context.Context, xmap *api.XMap, targets []*mod
 // 示例3：展示并发扫描与进度跟踪
 func demonstrateConcurrentScanning(ctx context.Context, xmap *api.XMap) {
 	// 创建大量目标
-	targets := make([]*model.ScanTarget, 0, 100)
+	targets := make([]*types.ScanTarget, 0, 100)
 	for i := 0; i < 100; i++ {
-		targets = append(targets, &model.ScanTarget{
+		targets = append(targets, &types.ScanTarget{
 			IP:       "example.com",
 			Port:     80 + i%10, // 使用不同端口
 			Protocol: "tcp",
-			ID:       fmt.Sprintf("target-%03d", i+1),
 		})
 	}
 
 	// 创建扫描选项
-	options := &model.ScanOptions{
+	options := &types.ScanOptions{
 		Timeout:          3,
 		Retries:          1,
 		VersionIntensity: 5,
@@ -229,17 +225,17 @@ func demonstrateConcurrentScanning(ctx context.Context, xmap *api.XMap) {
 	}
 
 	// 创建任务
-	task := &model.ScanTask{
+	task := &types.ScanTask{
 		ID:        "concurrent-task",
 		Targets:   targets,
 		Options:   options,
-		Status:    model.TaskStatusPending,
+		Status:    types.TaskStatusPending,
 		CreatedAt: time.Now(),
 	}
 
 	// 进度回调函数
 	var lastUpdateTime time.Time
-	progressCallback := func(progress *model.ScanProgress) {
+	progressCallback := func(progress *types.ScanProgress) {
 		// 限制更新频率
 		if time.Since(lastUpdateTime) < 200*time.Millisecond {
 			return
@@ -286,11 +282,10 @@ func demonstrateConcurrentScanning(ctx context.Context, xmap *api.XMap) {
 // 示例4：展示错误处理与重试
 func demonstrateErrorHandling(ctx context.Context, xmap *api.XMap) {
 	// 创建一个无效目标
-	invalidTarget := &model.ScanTarget{
+	invalidTarget := &types.ScanTarget{
 		IP:       "invalid-host-that-does-not-exist.example",
 		Port:     80,
 		Protocol: "tcp",
-		ID:       "invalid-target",
 	}
 
 	// 4.1 处理无效目标
@@ -304,15 +299,14 @@ func demonstrateErrorHandling(ctx context.Context, xmap *api.XMap) {
 
 	// 4.2 处理超时
 	fmt.Println("\n4.2 处理超时")
-	timeoutTarget := &model.ScanTarget{
+	timeoutTarget := &types.ScanTarget{
 		IP:       "example.com",
 		Port:     80,
 		Protocol: "tcp",
-		ID:       "timeout-target",
 	}
 
 	// 使用短超时选项
-	shortTimeoutOptions := &model.ScanOptions{
+	shortTimeoutOptions := &types.ScanOptions{
 		Timeout:          1, // 1秒超时
 		Retries:          0, // 不重试
 		VersionIntensity: 5,
@@ -330,7 +324,7 @@ func demonstrateErrorHandling(ctx context.Context, xmap *api.XMap) {
 
 	// 4.3 使用重试机制
 	fmt.Println("\n4.3 使用重试机制")
-	retryOptions := &model.ScanOptions{
+	retryOptions := &types.ScanOptions{
 		Timeout:          1, // 1秒超时
 		Retries:          5, // 5次重试
 		VersionIntensity: 5,
@@ -356,7 +350,7 @@ func demonstrateErrorHandling(ctx context.Context, xmap *api.XMap) {
 	go func() {
 		defer wg.Done()
 
-		longTimeoutOptions := &model.ScanOptions{
+		longTimeoutOptions := &types.ScanOptions{
 			Timeout:          30,   // 30秒超时
 			Retries:          3,    // 3次重试
 			VersionIntensity: 9,    // 高强度版本检测

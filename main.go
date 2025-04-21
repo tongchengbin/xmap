@@ -12,8 +12,8 @@ import (
 	"github.com/projectdiscovery/gologger"
 	"github.com/projectdiscovery/gologger/levels"
 	"github.com/tongchengbin/xmap/pkg/api"
-	"github.com/tongchengbin/xmap/pkg/model"
 	"github.com/tongchengbin/xmap/pkg/output"
+	"github.com/tongchengbin/xmap/pkg/types"
 )
 
 var (
@@ -186,7 +186,7 @@ func main() {
 	}
 
 	// 创建扫描选项
-	scanOptions := &model.ScanOptions{
+	scanOptions := &types.ScanOptions{
 		Timeout:          timeoutFlag,
 		Retries:          retriesFlag,
 		UseSSL:           sslFlag,
@@ -239,7 +239,7 @@ func main() {
 	}
 
 	// 执行扫描
-	err = xmapInstance.ExecuteWithResultCallback(ctx, targets, scanOptions, 
+	err = xmapInstance.ExecuteWithResultCallback(ctx, targets, scanOptions,
 		// 进度回调
 		func(completed, total int, percentage float64, status string) {
 			if silentFlag || noProgressFlag {
@@ -260,7 +260,7 @@ func main() {
 			)
 		},
 		// 结果回调 - 每当有一个结果就立即输出
-		func(result *model.ScanResult) {
+		func(result *types.ScanResult) {
 			// 使用输出器输出结果
 			err := outer.Output(result)
 			if err != nil {
@@ -326,8 +326,8 @@ func parsePorts(portsStr string) []int {
 }
 
 // 解析目标
-func parseTargets(targetStr, targetFile string, ports []int) ([]*model.ScanTarget, error) {
-	targets := make([]*model.ScanTarget, 0)
+func parseTargets(targetStr, targetFile string, ports []int) ([]*types.ScanTarget, error) {
+	targets := make([]*types.ScanTarget, 0)
 
 	// 从命令行参数解析目标
 	if targetStr != "" {
@@ -348,8 +348,8 @@ func parseTargets(targetStr, targetFile string, ports []int) ([]*model.ScanTarge
 }
 
 // 解析目标字符串
-func parseTargetString(targetStr string, ports []int) []*model.ScanTarget {
-	targets := make([]*model.ScanTarget, 0)
+func parseTargetString(targetStr string, ports []int) []*types.ScanTarget {
+	targets := make([]*types.ScanTarget, 0)
 
 	// 处理多个目标，以逗号分隔
 	targetStrs := strings.Split(targetStr, ",")
@@ -368,7 +368,7 @@ func parseTargetString(targetStr string, ports []int) []*model.ScanTarget {
 
 		// 如果指定了端口，只使用该端口
 		if port > 0 {
-			targets = append(targets, &model.ScanTarget{
+			targets = append(targets, &types.ScanTarget{
 				IP:       ip,
 				Port:     port,
 				Protocol: "tcp",
@@ -376,7 +376,7 @@ func parseTargetString(targetStr string, ports []int) []*model.ScanTarget {
 		} else {
 			// 否则使用所有指定的端口
 			for _, p := range ports {
-				targets = append(targets, &model.ScanTarget{
+				targets = append(targets, &types.ScanTarget{
 					IP:       ip,
 					Port:     p,
 					Protocol: "tcp",
@@ -389,7 +389,7 @@ func parseTargetString(targetStr string, ports []int) []*model.ScanTarget {
 }
 
 // 从文件解析目标
-func parseTargetFile(filename string, ports []int) ([]*model.ScanTarget, error) {
+func parseTargetFile(filename string, ports []int) ([]*types.ScanTarget, error) {
 	// 读取文件
 	data, err := os.ReadFile(filename)
 	if err != nil {
@@ -398,7 +398,7 @@ func parseTargetFile(filename string, ports []int) ([]*model.ScanTarget, error) 
 
 	// 解析每一行
 	lines := strings.Split(string(data), "\n")
-	targets := make([]*model.ScanTarget, 0, len(lines)*len(ports))
+	targets := make([]*types.ScanTarget, 0, len(lines)*len(ports))
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)

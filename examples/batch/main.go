@@ -10,7 +10,7 @@ import (
 	"github.com/projectdiscovery/gologger"
 	"github.com/projectdiscovery/gologger/levels"
 	"github.com/tongchengbin/xmap/pkg/api"
-	"github.com/tongchengbin/xmap/pkg/model"
+	"github.com/tongchengbin/xmap/pkg/types"
 )
 
 func main() {
@@ -49,7 +49,7 @@ func main() {
 	)
 
 	// 创建扫描选项
-	options := &model.ScanOptions{
+	options := &types.ScanOptions{
 		Timeout:          5,
 		Retries:          2,
 		VersionIntensity: 7,
@@ -62,16 +62,16 @@ func main() {
 	defer cancel()
 
 	// 创建任务
-	task := &model.ScanTask{
+	task := &types.ScanTask{
 		ID:        "batch-task",
 		Targets:   targets,
 		Options:   options,
-		Status:    model.TaskStatusPending,
+		Status:    types.TaskStatusPending,
 		CreatedAt: time.Now(),
 	}
 
 	// 进度回调函数
-	progressCallback := func(progress *model.ScanProgress) {
+	progressCallback := func(progress *types.ScanProgress) {
 		fmt.Printf("\r进度: %.2f%% (%d/%d) - 成功: %d, 失败: %d, 预计剩余时间: %ds",
 			progress.Percentage,
 			progress.CompletedTargets,
@@ -104,7 +104,7 @@ func main() {
 }
 
 // 读取目标文件
-func readTargetsFile(filename string) ([]*model.ScanTarget, error) {
+func readTargetsFile(filename string) ([]*types.ScanTarget, error) {
 	// 读取文件
 	data, err := os.ReadFile(filename)
 	if err != nil {
@@ -113,7 +113,7 @@ func readTargetsFile(filename string) ([]*model.ScanTarget, error) {
 
 	// 解析目标
 	lines := strings.Split(string(data), "\n")
-	targets := make([]*model.ScanTarget, 0, len(lines))
+	targets := make([]*types.ScanTarget, 0, len(lines))
 
 	for i, line := range lines {
 		line = strings.TrimSpace(line)
@@ -128,11 +128,10 @@ func readTargetsFile(filename string) ([]*model.ScanTarget, error) {
 		}
 
 		// 创建目标
-		target := &model.ScanTarget{
+		target := &types.ScanTarget{
 			IP:       ip,
 			Port:     port,
 			Protocol: "tcp",
-			ID:       fmt.Sprintf("target-%d", i+1),
 		}
 
 		targets = append(targets, target)
@@ -165,7 +164,7 @@ func parseTarget(target string) (string, int) {
 }
 
 // 统计服务数量
-func countServices(results []*model.ScanResult) int {
+func countServices(results []*types.ScanResult) int {
 	count := 0
 	for _, result := range results {
 		if result.Service != "" {
@@ -176,7 +175,7 @@ func countServices(results []*model.ScanResult) int {
 }
 
 // 打印服务统计
-func printServiceStats(results []*model.ScanResult) {
+func printServiceStats(results []*types.ScanResult) {
 	// 统计服务类型
 	serviceStats := make(map[string]int)
 	for _, result := range results {
@@ -195,7 +194,7 @@ func printServiceStats(results []*model.ScanResult) {
 }
 
 // 保存结果到文件
-func saveResultsToFile(results []*model.ScanResult, filename string) {
+func saveResultsToFile(results []*types.ScanResult, filename string) {
 	// 创建文件
 	file, err := os.Create(filename)
 	if err != nil {
