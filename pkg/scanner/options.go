@@ -6,7 +6,9 @@ import (
 
 // ScanOptions 扫描选项
 type ScanOptions struct {
-	// 超时时间
+	// 单个端口识别最大超时时间
+	MaxTimeout time.Duration
+	// 超时时间 单个探针
 	Timeout time.Duration
 	// 重试次数
 	Retries int

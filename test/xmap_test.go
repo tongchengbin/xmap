@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/projectdiscovery/gologger"
-	"github.com/projectdiscovery/gologger/levels"
-	"github.com/tongchengbin/xmap/pkg/scanner"
 	"net"
 	"testing"
 	"time"
+
+	"github.com/projectdiscovery/gologger"
+	"github.com/projectdiscovery/gologger/levels"
+	"github.com/tongchengbin/xmap/pkg/scanner"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/tongchengbin/xmap/pkg/api"
@@ -420,4 +421,26 @@ func TestRemoteWaf(t *testing.T) {
 		Protocol: string(scanner.TCP),
 	})
 	println(result, err)
+}
+
+func TestScanWithWaf(t *testing.T) {
+	// 创建XMap实例
+	gologger.DefaultLogger.SetMaxLevel(levels.LevelDebug)
+	xmap := api.NewXMap(
+		api.WithTimeout(4*time.Second),
+		api.WithRetries(1),
+		api.WithDebugRequest(true),
+		api.WithDebugResponse(true),
+		api.WithVerbose(true),
+	)
+	ctx := context.Background()
+	result, err := xmap.Scan(ctx, &model.ScanTarget{
+		IP:       "frp.lostpeach.cn",
+		Port:     3001,
+		Protocol: string(scanner.TCP),
+	})
+	if err != nil {
+		println(err.Error())
+	}
+	println(result)
 }
