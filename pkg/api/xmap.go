@@ -522,7 +522,12 @@ func (x *XMap) convertResult(result *scanner.ScanResult, target *types.ScanTarge
 	}
 
 	if result.Extra != nil && len(result.Extra) > 0 {
-		modelResult.Components = append(modelResult.Components, result.Extra)
+		// fix product to name
+		if name, ok := result.Extra["product"]; ok {
+			result.Extra["name"] = name
+			delete(result.Extra, "product")
+			modelResult.Components = append(modelResult.Components, result.Extra)
+		}
 	}
 	if result.Service == "http" && result.SSL {
 		modelResult.Service = "https"
