@@ -1,7 +1,6 @@
 package scanner
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
@@ -14,7 +13,9 @@ import (
 
 	"github.com/projectdiscovery/gologger"
 	"github.com/tongchengbin/xmap/pkg/probe"
+	"github.com/tongchengbin/xmap/pkg/types"
 )
+
 
 // ServiceScanner 默认扫描器实现
 type ServiceScanner struct {
@@ -51,24 +52,24 @@ func NewServiceScanner(options ...ScanOption) (*ServiceScanner, error) {
 }
 
 // Scan 扫描单个目标
-func (s *ServiceScanner) Scan(target *Target, options ...ScanOption) (*ScanResult, error) {
+func (s *ServiceScanner) Scan(target *types.ScanTarget, options ...ScanOption) (*types.ScanResult, error) {
 	return s.ScanWithContext(context.Background(), target, options...)
 }
 
 // BatchScan 批量扫描多个目标
-func (s *ServiceScanner) BatchScan(targets []*Target, options ...ScanOption) ([]*ScanResult, error) {
+func (s *ServiceScanner) BatchScan(targets []*types.ScanTarget, options ...ScanOption) ([]*types.ScanResult, error) {
 	return s.BatchScanWithContext(context.Background(), targets, options...)
 }
 
 // ScanWithContext 带上下文的扫描
-func (s *ServiceScanner) ScanWithContext(ctx context.Context, target *Target, options ...ScanOption) (*ScanResult, error) {
+func (s *ServiceScanner) ScanWithContext(ctx context.Context, target *types.ScanTarget, options ...ScanOption) (*types.ScanResult, error) {
 	// 创建扫描选项
 	scanOptions := s.createScanOptions(options)
 	// 创建扫描结果
-	result := NewScanResult(target)
+	result := types.NewScanResult(target)
 	// 选择适用的探针
 	var probes []*probe.Probe
-	if target.Protocol == TCP {
+	if target.Protocol == "tcp" {
 		probes = s.probeManager.GetTCPProbes()
 	} else {
 		probes = s.probeManager.GetUDPProbes()
@@ -94,20 +95,17 @@ func (s *ServiceScanner) ScanWithContext(ctx context.Context, target *Target, op
 		probes = sortProbes(probes, target.Port, true)
 		err = s.executeProbes(ctx, target, probes, true, result, scanOptions)
 	}
-	if result.Target.IP == "" {
-		result.Target.IP = target.IP
-	}
 	result.Complete(err)
 	return result, err
 }
 
 // BatchScanWithContext 带上下文的批量扫描
-func (s *ServiceScanner) BatchScanWithContext(ctx context.Context, targets []*Target, options ...ScanOption) ([]*ScanResult, error) {
+func (s *ServiceScanner) BatchScanWithContext(ctx context.Context, targets []*types.ScanTarget, options ...ScanOption) ([]*types.ScanResult, error) {
 	// 创建扫描选项
 	scanOptions := s.createScanOptions(options)
 
 	// 创建结果切片
-	results := make([]*ScanResult, len(targets))
+	results := make([]*types.ScanResult, len(targets))
 
 	// 创建工作池
 	workerCount := scanOptions.MaxParallelism
@@ -169,7 +167,7 @@ func (s *ServiceScanner) createScanOptions(options []ScanOption) *ScanOptions {
 }
 
 // executeProbes 执行探针扫描
-func (s *ServiceScanner) executeProbes(ctx context.Context, target *Target, probes []*probe.Probe, useSSl bool, result *ScanResult, options *ScanOptions) error {
+func (s *ServiceScanner) executeProbes(ctx context.Context, target *types.ScanTarget, probes []*probe.Probe, useSSl bool, result *types.ScanResult, options *ScanOptions) error {
 	// 根据协议类型选择不同的处理逻辑
 	switch target.Protocol {
 	case "udp":
@@ -180,7 +178,7 @@ func (s *ServiceScanner) executeProbes(ctx context.Context, target *Target, prob
 }
 
 // executeUDPProbes 执行 UDP 探针扫描
-func (s *ServiceScanner) executeUDPProbes(ctx context.Context, target *Target, probes []*probe.Probe, result *ScanResult, options *ScanOptions) error {
+func (s *ServiceScanner) executeUDPProbes(ctx context.Context, target *types.ScanTarget, probes []*probe.Probe, result *types.ScanResult, options *ScanOptions) error {
 	// 对每个探针执行扫描
 	for _, pb := range probes {
 		// 检查上下文是否已取消
@@ -200,7 +198,9 @@ func (s *ServiceScanner) executeUDPProbes(ctx context.Context, target *Target, p
 
 		if len(response) > 0 {
 			// 匹配响应
-			target.StatusCheck.SetOpen()
+			if sc, ok := target.StatusCheck.(*types.PortStatusCheck); ok {
+				sc.SetOpen()
+			}
 			matchService, extra := pb.Match(response)
 			if matchService != nil {
 				// 设置服务信息
@@ -222,15 +222,16 @@ func (s *ServiceScanner) executeUDPProbes(ctx context.Context, target *Target, p
 
 	// 如果没有匹配到服务，但端口是开放的，设置为未知服务
 	// 检查端口是否开放（如果有读取到数据或者成功连接过）
-	if target.StatusCheck.Open > 0 || target.StatusCheck.ReadOk > 0 {
-		result.Service = "unknown"
+	if sc, ok := target.StatusCheck.(*types.PortStatusCheck); ok {
+		if sc.Open > 0 || sc.ReadOk > 0 {
+			result.Service = "unknown"
+		}
 	}
-
 	return nil
 }
 
 // executeTCPProbes 执行 TCP 探针扫描
-func (s *ServiceScanner) executeTCPProbes(ctx context.Context, target *Target, probes []*probe.Probe, useSSl bool, result *ScanResult, options *ScanOptions) error {
+func (s *ServiceScanner) executeTCPProbes(ctx context.Context, target *types.ScanTarget, probes []*probe.Probe, useSSl bool, result *types.ScanResult, options *ScanOptions) error {
 	// 对每个探针执行扫描
 	for _, pb := range probes {
 		// 检查上下文是否已取消
@@ -243,11 +244,13 @@ func (s *ServiceScanner) executeTCPProbes(ctx context.Context, target *Target, p
 		// 执行 TCP 探针
 		response, errType := s.executeTCPProbe(ctx, target, pb, useSSl, options)
 		if s.defaultOptions.DebugResponse && len(response) > 0 {
-			gologger.Print().Msgf("Read (%d bytes) for probe %s on %s:%d:\n%s", len(response), pb.Name, target.IP, target.Port, formatProbeData(response))
+			gologger.Print().Msgf("Read (%d bytes) for TCP probe %s on %s:%d:\n%s", len(response), pb.Name, target.IP, target.Port, formatProbeData(response))
 		}
 		if len(response) > 0 {
 			// 匹配响应
-			target.StatusCheck.SetOpen()
+			if sc, ok := target.StatusCheck.(*types.PortStatusCheck); ok {
+				sc.SetOpen()
+			}
 			matchService, extra := pb.Match(response)
 			// 如果匹配成功
 			if matchService != nil {
@@ -262,46 +265,40 @@ func (s *ServiceScanner) executeTCPProbes(ctx context.Context, target *Target, p
 				return nil
 			}
 		}
-		shouldTerminate := target.StatusCheck.HandleError(errType, target)
-		if shouldTerminate {
-			return target.StatusCheck.GetReason()
+		if sc, ok := target.StatusCheck.(*types.PortStatusCheck); ok {
+			shouldTerminate := sc.HandleError(errType, target)
+			if shouldTerminate {
+				return sc.GetReason()
+			}
 		}
 	}
 	// 如果没有匹配到任何服务
-	return ErrNotMatched
-}
-
-func replaceProbeRaw(raw []byte, target *Target) []byte {
-	return bytes.Replace(raw, []byte("{Host}"), []byte(fmt.Sprintf("%s:%d", target.IP, target.Port)), 1)
+	return errors.New("not matched")
 }
 
 // executeTCPProbe 执行 TCP 探针
-func (s *ServiceScanner) executeTCPProbe(ctx context.Context, target *Target, probe *probe.Probe, useSSL bool, options *ScanOptions) ([]byte, ErrorType) {
+func (s *ServiceScanner) executeTCPProbe(ctx context.Context, target *types.ScanTarget, probe *probe.Probe, useSSL bool, options *ScanOptions) ([]byte, types.ErrorType) {
 	// 创建连接超时上下文
 	timeoutCtx, cancel := context.WithTimeout(ctx, options.Timeout)
 	defer cancel()
 
 	if options.DebugRequest {
-		gologger.Debug().Msgf("Sending TCP probe %s to %s", probe.Name, target.String())
+		gologger.Debug().Msgf("Sending TCP probe %s to %s", probe.Name, target.Host)
 	}
 
 	// 创建 TCP 连接
 	conn, err := s.createConnection(timeoutCtx, target, useSSL, options.Timeout)
 	if err != nil {
-		// 连接失败，显示错误信息
 		gologger.Debug().Msgf("TCP connect to [%s:%d] failed (timeout: %dms): %s", target.IP, target.Port, options.Timeout/time.Millisecond, err)
-		return nil, ParseNetworkError(err)
+		return nil, types.ParseNetworkError(err)
 	}
 	defer conn.Close()
 
-	// 设置读写超时
 	_ = conn.SetDeadline(time.Now().Add(options.Timeout))
 
-	// 发送探针数据
 	raw := replaceProbeRaw(probe.SendData, target)
 	_, err = conn.Write(raw)
 
-	// 记录发送的数据
 	if useSSL {
 		gologger.Debug().Msgf("Sent %d bytes to [ssl://%s:%d]", len(raw), target.IP, target.Port)
 	} else {
@@ -310,26 +307,25 @@ func (s *ServiceScanner) executeTCPProbe(ctx context.Context, target *Target, pr
 
 	if err != nil {
 		gologger.Debug().Msgf("TCP write failed for [%s:%d]: %v", target.IP, target.Port, err)
-		return nil, ParseNetworkError(err)
+		return nil, types.ParseNetworkError(err)
 	}
 
-	// 读取响应
 	response, err := s.readResponse(conn, options)
 
 	if len(response) > 0 {
-		return response, ErrNil
+		return response, types.ErrNil
 	}
 
 	if err != nil {
 		gologger.Debug().Msgf("TCP read failed for [%s:%d]: %v", target.IP, target.Port, err)
-		return response, ParseNetworkError(err)
+		return response, types.ParseNetworkError(err)
 	}
 
-	return response, ErrNil
+	return response, types.ErrNil
 }
 
 // executeUDPProbe 执行 UDP 探针
-func (s *ServiceScanner) executeUDPProbe(ctx context.Context, target *Target, probe *probe.Probe, options *ScanOptions) ([]byte, ErrorType) {
+func (s *ServiceScanner) executeUDPProbe(ctx context.Context, target *types.ScanTarget, probe *probe.Probe, options *ScanOptions) ([]byte, types.ErrorType) {
 	// 创建连接超时上下文
 	timeoutCtx, cancel := context.WithTimeout(ctx, options.Timeout)
 	defer cancel()
@@ -342,7 +338,7 @@ func (s *ServiceScanner) executeUDPProbe(ctx context.Context, target *Target, pr
 	conn, err := s.createConnection(timeoutCtx, target, false, options.Timeout)
 	if err != nil {
 		gologger.Debug().Msgf("UDP connect to [%s:%d] failed (timeout: %dms): %s", target.IP, target.Port, options.Timeout/time.Millisecond, err)
-		return nil, ParseNetworkError(err)
+		return nil, types.ParseNetworkError(err)
 	}
 	defer conn.Close()
 
@@ -367,7 +363,7 @@ func (s *ServiceScanner) executeUDPProbe(ctx context.Context, target *Target, pr
 
 	if err != nil {
 		gologger.Debug().Msgf("UDP write failed for [%s:%d]: %v", target.IP, target.Port, err)
-		return nil, ParseNetworkError(err)
+		return nil, types.ParseNetworkError(err)
 	}
 
 	// 读取响应（UDP 可能不会有响应，所以要特别处理）
@@ -375,22 +371,25 @@ func (s *ServiceScanner) executeUDPProbe(ctx context.Context, target *Target, pr
 
 	if len(response) > 0 {
 		// UDP 收到响应通常表示端口开放
-		target.StatusCheck.SetOpen()
-		target.StatusCheck.SetReadOK()
-		return response, ErrNil
+		if sc, ok := target.StatusCheck.(*types.PortStatusCheck); ok {
+			sc.SetOpen()
+			sc.SetReadOK()
+		}
+		return response, types.ErrNil
 	}
 
 	if err != nil {
 		// UDP 错误可能是端口过滤或关闭的标志
 		gologger.Debug().Msgf("UDP read failed for [%s:%d]: %v", target.IP, target.Port, err)
-		return response, ParseNetworkError(err)
+		return response, types.ParseNetworkError(err)
+		return response, types.ParseNetworkError(err)
 	}
 
-	return response, ErrNil
+	return response, types.ErrNil
 }
 
 // createConnection 创建网络连接
-func (s *ServiceScanner) createConnection(ctx context.Context, target *Target, useSSL bool, timeout time.Duration) (net.Conn, error) {
+func (s *ServiceScanner) createConnection(ctx context.Context, target *types.ScanTarget, useSSL bool, timeout time.Duration) (net.Conn, error) {
 	// 构建连接地址
 	address := fmt.Sprintf("%s:%d", target.Host, target.Port)
 
@@ -449,13 +448,10 @@ func (s *ServiceScanner) createConnection(ctx context.Context, target *Target, u
 	// 根据不同的协议类型处理
 	switch actualConn := conn.(type) {
 	case *net.TCPConn:
-		println(">>>>>>>>>>")
 		if remoteAddr, ok := actualConn.RemoteAddr().(*net.TCPAddr); ok {
 			resolvedIP := remoteAddr.IP.String()
-			println("123", target.IP)
 			if target.IP == "" {
 				target.IP = resolvedIP
-				println("TTTT", target.IP)
 				gologger.Debug().Msgf("%s:%d", resolvedIP, target.Port)
 			}
 		}
@@ -553,3 +549,9 @@ func formatProbeData(data []byte) string {
 	result.WriteString("'")
 	return result.String()
 }
+
+// replaceProbeRaw 替换探针原始数据中的占位符
+func replaceProbeRaw(raw []byte, target *types.ScanTarget) []byte {
+	return []byte(strings.ReplaceAll(string(raw), "{Host}", fmt.Sprintf("%s:%d", target.IP, target.Port)))
+}
+

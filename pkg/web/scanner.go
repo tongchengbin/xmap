@@ -7,7 +7,7 @@ import (
 
 	"github.com/tongchengbin/appfinger/pkg/crawl"
 	"github.com/tongchengbin/appfinger/pkg/rule"
-	"github.com/tongchengbin/xmap/pkg/scanner"
+	"github.com/tongchengbin/xmap/pkg/types"
 )
 
 // Scanner Web应用指纹扫描器
@@ -53,14 +53,6 @@ func (s *Scanner) SetProxy(proxy string) {
 	s.options.Proxy = proxy
 }
 
-// ScanResult Web扫描结果
-type ScanResult struct {
-	Target     *scanner.Target
-	URL        string
-	Components map[string]map[string]string
-	Error      error
-	Banner     *rule.Banner
-}
 
 // ShouldScan 判断是否应该进行Web扫描
 func ShouldScan(service string) bool {
@@ -70,11 +62,29 @@ func ShouldScan(service string) bool {
 }
 
 // ScanWithContext 带上下文的Web扫描
-func (s *Scanner) ScanWithContext(ctx context.Context, url string) (*ScanResult, error) {
+func (s *Scanner) ScanWithContext(ctx context.Context, target *types.ScanTarget) (*types.ScanResult, error) {
 	// 获取指纹库
 	finger := rule.GetRuleManager().GetFinger()
 	if finger == nil {
 		return nil, fmt.Errorf("指纹库未加载")
+	}
+
+	// 组装 URL，优先用 Scheme 字段
+	scheme := target.Scheme
+	if scheme == "" {
+		// 自动推断
+		if target.Port == 443 {
+			scheme = "https"
+		} else {
+			scheme = "http"
+		}
+	}
+	url := fmt.Sprintf("%s://%s", scheme, target.Host)
+	if target.Port != 80 && target.Port != 443 && target.Port != 0 {
+		url += fmt.Sprintf(":%d", target.Port)
+	}
+	if target.Path != "" {
+		url += target.Path
 	}
 
 	// 创建爬虫
@@ -83,15 +93,30 @@ func (s *Scanner) ScanWithContext(ctx context.Context, url string) (*ScanResult,
 	// 执行匹配
 	banner, components, err := crawler.Match(url)
 	if err != nil {
-		return &ScanResult{
-			URL:   url,
-			Error: err,
+		// 转换 components 为 []map[string]interface{}
+		var componentsSlice []map[string]interface{}
+		for k, v := range components {
+			entry := map[string]interface{}{"name": k, "info": v}
+			componentsSlice = append(componentsSlice, entry)
+		}
+		return &types.ScanResult{
+			Target:     target,
+			URL:        url,
+			Error:      err,
+			Components: componentsSlice,
 		}, err
 	}
+	// 转换 components 为 []map[string]interface{}
+	var componentsSlice []map[string]interface{}
+	for k, v := range components {
+		entry := map[string]interface{}{"name": k, "info": v}
+		componentsSlice = append(componentsSlice, entry)
+	}
 	// 返回结果
-	return &ScanResult{
+	return &types.ScanResult{
+		Target:     target,
 		URL:        url,
-		Components: components,
+		Components: componentsSlice,
 		Banner:     banner,
 	}, nil
 }

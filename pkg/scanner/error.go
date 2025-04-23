@@ -2,8 +2,6 @@ package scanner
 
 import (
 	"errors"
-	"io"
-	"strings"
 )
 
 // ErrorType 错误类型枚举
@@ -59,26 +57,3 @@ var (
 	// ErrPermissionDenied 表示权限错误
 	ErrPermissionDenied = errors.New("permission denied")
 )
-
-// ParseNetworkError 解析网络错误并返回特定的错误类型和错误实例
-// 返回值：
-// - errorType: 错误类型枚举
-func ParseNetworkError(err error) ErrorType {
-	if err == nil {
-		return ErrorTypeUnknown
-	}
-
-	// 方法1：使用 errors.Is 检查标准 io.EOF
-	if errors.Is(err, io.EOF) {
-		return ErrorEOF
-	} else if strings.Contains(err.Error(), "max read timeout") {
-		return ErrorTypeReadTimeout
-	} else if strings.Contains(err.Error(), "refused it") {
-		return ErrorTypeConnectionRefused
-	} else if strings.Contains(err.Error(), "i/o timeout") {
-		return ErrorTypeReadTimeout
-	} else {
-		println(">>>>>>>>>>>>>>", err, err.Error())
-		return ErrorTypeUnknown
-	}
-}

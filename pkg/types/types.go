@@ -2,55 +2,123 @@ package types
 
 import (
 	"encoding/json"
+	"fmt"
+	"time"
+)
+
+// ScanStatus 扫描结果状态
+type ScanStatus int
+
+const (
+	StatusUnknown ScanStatus = iota
+	StatusMatched
+	StatusNoMatch
+	StatusError
+	StatusClosed
+	StatusInvalid    // 无效目标（如连续多次连接失败）
+	StatusFirewalled // 可能被防火墙阻止
 )
 
 // ScanTarget 表示扫描目标
 type ScanTarget struct {
+	// Web 场景下的协议（http/https），与 Protocol (tcp/udp) 区分
+	Scheme string `json:"-"` 
 	// 原始输入（用户提供的字符串）
 	Raw string `json:"raw,omitempty"`
-
 	// 解析后的信息
 	Host     string `json:"host,omitempty"`     // 主机名或IP
 	IP       string `json:"ip,omitempty"`       // IP地址
 	Port     int    `json:"port,omitempty"`     // 端口
 	Protocol string `json:"protocol,omitempty"` // 协议 (TCP/UDP)
 	Path     string `json:"path,omitempty"`     // URL路径
-
 	// 解析状态，不输出到JSON
 	Parsed bool `json:"-"`
+	// 状态检查器，用于跟踪连接状态，不输出到JSON
+	StatusCheck interface{} `json:"-"`
+}
+
+// String 返回目标的字符串表示
+func (t *ScanTarget) String() string {
+	return fmt.Sprintf("%s:%d", t.Host, t.Port)
 }
 
 // ScanResult 表示扫描结果
 type ScanResult struct {
+	// Web 扫描相关字段
+	URL           string                             `json:"url,omitempty"`
+	Banner        interface{}                        `json:"banner,omitempty"`
+	// 通用组件信息
+	Components    []map[string]interface{}           `json:"components,omitempty"`
 	// 目标信息
-	Target *ScanTarget `json:"target"`
+	Target *ScanTarget
 	// 服务名称
-	Service string `json:"service,omitempty"`
+	Service string
+	// 是否使用SSL
+	SSL bool
 	// 附加信息
-	Components []map[string]interface{} `json:"components,omitempty"`
+	Extra map[string]interface{}
 	// 主机名
-	Hostname string `json:"hostname,omitempty"`
+	Hostname    string
+	RawResponse []byte
 	// 匹配的探针名称
-	MatchedProbe string `json:"matched_probe,omitempty"`
-	// 匹配的服务名称
-	MatchedService string `json:"matched_service,omitempty"`
+	MatchedProbe string
 	// 匹配的正则表达式
-	MatchedPattern string `json:"matched_pattern,omitempty"`
+	MatchedPattern string
 	// 扫描耗时
-	Duration float64 `json:"duration"`
+	Duration float64
 	// 错误信息
-	Error string `json:"error,omitempty"`
-	// 自定义元数据，http banner,tcp banner
-	Metadata map[string]interface{} `json:"metadata,omitempty"`
+	Error error
+	// 扫描状态
+	Status ScanStatus
+
+	startTime time.Time
+	endTime   time.Time
 }
 
+// NewScanResult 创建新的扫描结果
+func NewScanResult(target *ScanTarget) *ScanResult {
+	return &ScanResult{
+		Target:    target,
+		startTime: time.Now(),
+		Status:    StatusUnknown,
+	}
+}
+
+// JSON 返回扫描结果的 JSON 字符串
 func (r *ScanResult) JSON() string {
 	b, err := json.Marshal(r)
 	if err != nil {
-		panic(err)
+		return "{}"
 	}
 	return string(b)
 }
+
+// Complete 完成扫描结果
+func (r *ScanResult) Complete(err error) {
+	r.Error = err
+	r.endTime = time.Now()
+	r.Duration = r.endTime.Sub(r.startTime).Seconds()
+
+	// 根据错误类型设置状态
+	if err != nil {
+		if err.Error() == "invalid target" {
+			r.Status = StatusInvalid
+		} else {
+			r.Status = StatusError
+		}
+	} else if r.Service != "" {
+		r.Status = StatusMatched
+	} else {
+		r.Status = StatusNoMatch
+	}
+}
+
+// SetMatchResult 设置匹配结果
+func (r *ScanResult) SetMatchResult(probeName, service, pattern string, softMatch bool) {
+	r.MatchedProbe = probeName
+	r.MatchedPattern = pattern
+}
+
 
 // ScanOptions 表示扫描选项
 type ScanOptions struct {
