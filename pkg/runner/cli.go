@@ -7,10 +7,10 @@ import (
 	"github.com/projectdiscovery/goflags"
 )
 
-// 版本信息
+// Version 版本信息
 const Version = "v0.1.0"
 
-// banner
+// Banner 程序的banner
 var Banner = fmt.Sprintf(`
 __  ____  ___           
 \ \/ /  \/  / __ _ _ __  
@@ -65,7 +65,7 @@ func ParseOptions() (*Options, error) {
 	// 创建输出选项组
 	flagSet.CreateGroup("输出", "输出选项",
 		flagSet.StringVarP(&options.Output, "output", "o", "", "输出结果到文件"),
-		flagSet.StringVarP(&options.OutType, "output-type", "ot", "console", "输出格式 (json, csv, console)"),
+		flagSet.StringVarP(&options.OutType, "output-type", "ot", "json", "输出格式 (json, csv, console)"),
 		flagSet.BoolVarP(&options.Verbose, "verbose", "v", false, "显示详细信息"),
 		flagSet.BoolVarP(&options.Silent, "silent", "s", false, "静默模式"),
 		flagSet.BoolVar(&options.NoProgress, "no-progress", false, "不显示进度条"),

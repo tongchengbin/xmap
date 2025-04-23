@@ -6,14 +6,18 @@ import (
 
 // ScanTarget 表示扫描目标
 type ScanTarget struct {
-	// IP地址
-	IP string `json:"ip"`
-	// 端口
-	Port int `json:"port"`
-	// 协议 (TCP/UDP)
-	Protocol string `json:"protocol"`
-	// 自定义元数据
-	Metadata map[string]interface{} `json:"metadata,omitempty"`
+	// 原始输入（用户提供的字符串）
+	Raw string `json:"raw,omitempty"`
+
+	// 解析后的信息
+	Host     string `json:"host,omitempty"`     // 主机名或IP
+	IP       string `json:"ip,omitempty"`       // IP地址
+	Port     int    `json:"port,omitempty"`     // 端口
+	Protocol string `json:"protocol,omitempty"` // 协议 (TCP/UDP)
+	Path     string `json:"path,omitempty"`     // URL路径
+
+	// 解析状态，不输出到JSON
+	Parsed bool `json:"-"`
 }
 
 // ScanResult 表示扫描结果

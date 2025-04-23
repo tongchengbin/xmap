@@ -81,8 +81,6 @@ func (r *Runner) InitRuleManager() error {
 	return nil
 }
 
-
-
 // Run 执行扫描
 func (r *Runner) Run() error {
 	// 初始化规则管理器
@@ -93,22 +91,44 @@ func (r *Runner) Run() error {
 	// 解析端口
 	ports := utils.ParsePorts(r.options.Ports)
 
-	// 解析目标
-	targets, err := utils.ParseTargets(r.options.Target, r.options.TargetFile, ports)
-	if err != nil {
-		return fmt.Errorf("解析目标失败: %v", err)
+	// 创建未解析的目标列表
+	var unparsedTargets []*types.ScanTarget
+
+	// 从命令行参数创建未解析的目标
+	if len(r.options.Target) > 0 {
+		unparsedTargets = append(unparsedTargets, utils.CreateUnparsedTargets(r.options.Target)...)
 	}
 
-	if len(targets) == 0 {
+	// 从文件创建未解析的目标
+	if r.options.TargetFile != "" {
+		fileTargets, err := utils.CreateUnparsedTargetsFromFile(r.options.TargetFile)
+		if err != nil {
+			return fmt.Errorf("从文件加载目标失败: %v", err)
+		}
+		unparsedTargets = append(unparsedTargets, fileTargets...)
+	}
+
+	if len(unparsedTargets) == 0 {
 		return fmt.Errorf("未指定扫描目标，使用 -target 或 -target-file 参数")
 	}
 
+	// 延迟解析目标
+	targets := make([]*types.ScanTarget, 0, len(unparsedTargets))
+	for _, target := range unparsedTargets {
+		parsedTargets := utils.ParseTarget(target, ports)
+		if len(parsedTargets) > 0 {
+			targets = append(targets, parsedTargets...)
+		}
+	}
+	if len(targets) == 0 {
+		return fmt.Errorf("所有目标解析失败，请检查目标格式")
+	}
+	gologger.Info().Msgf("共解析到 %d 个有效目标", len(targets))
 	// 解析探针名称
 	var probeNames []string
 	if len(r.options.NmapProneName) > 0 {
 		probeNames = r.options.NmapProneName
 	}
-
 	// 创建扫描选项
 	scanOptions := &types.ScanOptions{
 		Timeout:          r.options.Timeout,
@@ -142,14 +162,20 @@ func (r *Runner) Run() error {
 	}()
 
 	// 创建结果输出器
-	var outer output.Outer
-	switch r.options.OutType {
-	case "json":
-		outer = output.NewJSONOuter(r.options.Output)
-	case "csv":
-		outer = output.NewCSVOuter(r.options.Output)
-	default:
-		outer = output.NewConsoleOuter(r.options.Output, r.options.Silent)
+	// 始终创建控制台输出器，确保控制台实时显示结果
+	consoleOuter := output.NewConsoleOuter("", r.options.Silent)
+
+	// 创建文件输出器（如果需要）
+	var fileOuter output.Outer
+	if r.options.Output != "" {
+		switch r.options.OutType {
+		case "json":
+			fileOuter = output.NewJSONOuter(r.options.Output)
+		case "csv":
+			fileOuter = output.NewCSVOuter(r.options.Output)
+		default:
+			fileOuter = output.NewConsoleOuter(r.options.Output, false) // 文件输出不需要静默模式
+		}
 	}
 
 	// 创建进度跟踪器
@@ -160,7 +186,7 @@ func (r *Runner) Run() error {
 	}
 
 	// 执行扫描
-	err = r.xmap.ExecuteWithResultCallback(ctx, targets, scanOptions,
+	err := r.xmap.ExecuteWithResultCallback(ctx, targets, scanOptions,
 		// 结果回调 - 每当有一个结果就立即输出
 		func(result *types.ScanResult) {
 			// 更新进度
@@ -168,16 +194,23 @@ func (r *Runner) Run() error {
 				progressTracker.Increment()
 			}
 
-			// 使用输出器输出结果
-			err := outer.Output(result)
+			// 始终在控制台显示结果
+			err := consoleOuter.Output(result)
 			if err != nil {
-				gologger.Error().Msgf("输出结果失败: %v", err)
+				gologger.Error().Msgf("控制台输出失败: %v", err)
+			}
+
+			// 如果指定了文件输出，也输出到文件
+			if fileOuter != nil {
+				err := fileOuter.Output(result)
+				if err != nil {
+					gologger.Error().Msgf("文件输出失败: %v", err)
+				}
 			}
 		},
 	)
 	if err != nil {
 		return fmt.Errorf("扫描失败: %v", err)
 	}
-
 	return nil
 }

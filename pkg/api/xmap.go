@@ -178,7 +178,7 @@ func (x *XMap) Scan(ctx context.Context, target *types.ScanTarget, options ...*t
 		opts = options[0]
 	}
 	// 转换目标
-	scannerTarget := scanner.NewTarget(target.IP, target.Port, scanner.Protocol(target.Protocol))
+	scannerTarget := scanner.NewTarget(target.Host, target.Port, scanner.Protocol(target.Protocol))
 
 	// 创建扫描选项
 	scanOptions := x.createScanOptions(opts)
@@ -510,7 +510,7 @@ func (x *XMap) convertResult(result *scanner.ScanResult, target *types.ScanTarge
 	// 创建模型结果
 	modelResult := &types.ScanResult{
 		Target: &types.ScanTarget{
-			IP:       target.IP,
+			Host:     target.Host,
 			Port:     target.Port,
 			Protocol: target.Protocol,
 		},
@@ -573,7 +573,7 @@ func (x *XMap) ParseTargetsString(targetsStr string) ([]*types.ScanTarget, error
 			continue
 		}
 
-		ip := parts[0]
+		host := parts[0]
 		port := 0
 		protocol := "tcp"
 
@@ -593,7 +593,7 @@ func (x *XMap) ParseTargetsString(targetsStr string) ([]*types.ScanTarget, error
 		}
 
 		target := &types.ScanTarget{
-			IP:       ip,
+			Host:     host,
 			Port:     port,
 			Protocol: protocol,
 		}

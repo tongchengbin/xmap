@@ -2,8 +2,9 @@ package output
 
 import (
 	"fmt"
-	"github.com/projectdiscovery/gologger"
 	"os"
+
+	"github.com/projectdiscovery/gologger"
 
 	"github.com/tongchengbin/xmap/pkg/types"
 )
@@ -65,7 +66,7 @@ func (o *ConsoleOuter) displayResults(result *types.ScanResult) {
 		}
 		name, hasName := component["name"]
 		version, hasVersion := component["version"]
-		
+
 		if hasName {
 			componentsStr += fmt.Sprintf("%v", name)
 			if hasVersion {
@@ -73,11 +74,11 @@ func (o *ConsoleOuter) displayResults(result *types.ScanResult) {
 			}
 		}
 	}
-	
+
 	// 使用Nuclei风格的输出格式
 	// 构建目标URL
-	targetURL := fmt.Sprintf("%s://%s:%d", result.Service, result.Target.IP, result.Target.Port)
-	
+	targetURL := fmt.Sprintf("%s://%s:%d", result.Service, result.Target.Host, result.Target.Port)
+
 	// 根据服务类型选择不同的颜色
 	serviceColor := "\x1b[32m" // 默认绿色
 	if result.Service == "https" || result.Service == "ssl" {
@@ -85,11 +86,11 @@ func (o *ConsoleOuter) displayResults(result *types.ScanResult) {
 	} else if result.Service == "http" {
 		serviceColor = "\x1b[33m" // http使用黄色
 	}
-	
+
 	// 打印格式化的结果
-	gologger.Info().Msgf("[%s] %s\x1b[0m [\x1b[36m%s\x1b[0m] [\x1b[31m%.2fs\x1b[0m]", 
-		serviceColor + result.Service, 
-		targetURL, 
+	gologger.Info().Msgf("[%s] %s\x1b[0m [\x1b[36m%s\x1b[0m] [\x1b[31m%.2fs\x1b[0m]",
+		serviceColor+result.Service,
+		targetURL,
 		componentsStr,
 		result.Duration)
 }
@@ -189,10 +190,10 @@ func ComponentsToString(components []map[string]interface{}) string {
 		if i > 0 {
 			result += ", "
 		}
-		
+
 		name, hasName := component["name"]
 		version, hasVersion := component["version"]
-		
+
 		if hasName {
 			result += fmt.Sprintf("%v", name)
 			if hasVersion {
