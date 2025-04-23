@@ -1,4 +1,18 @@
-# XMap: 高性能分布式网络服务指纹识别框架
+<p align="center">
+  <h1 align="center">XMap</h1>
+  <p align="center">高性能分布式网络服务指纹识别框架</p>
+</p>
+
+<p align="center">
+  <a href="https://golang.org/"><img src="https://img.shields.io/badge/Made%20with-Go-1f425f.svg" alt="made-with-Go"></a>
+  <a href="https://github.com/tongchengbin/xmap/releases"><img src="https://img.shields.io/github/release/tongchengbin/xmap.svg" alt="Release"></a>
+  <a href="https://github.com/tongchengbin/xmap/issues"><img src="https://img.shields.io/github/issues/tongchengbin/xmap.svg" alt="Issues"></a>
+  <a href="https://github.com/tongchengbin/xmap/blob/master/LICENSE"><img src="https://img.shields.io/github/license/tongchengbin/xmap.svg" alt="License"></a>
+</p>
+
+[中文文档](README.md) | [English Documentation](README_EN.md)
+
+## 简介
 
 XMap 是一个基于 Go 语言的高性能分布式网络服务指纹识别框架，它在 gonmap 的基础上进行了架构优化和功能扩展，专注于提供更高效、可扩展的网络服务识别能力。XMap 特别适合在大规模分布式环境中使用，支持多任务共享指纹库同时使用独立扫描参数的场景。
 
@@ -13,6 +27,7 @@ XMap 是一个基于 Go 语言的高性能分布式网络服务指纹识别框�
 - **丰富的输出格式**：支持 JSON、CSV 等多种输出格式
 - **实时监控**：提供扫描进度和资源使用情况的实时监控
 - **Web指纹识别**：集成appfinger实现高效的Web应用指纹识别
+- **美观的输出**：提供类似Nuclei的彩色输出格式，提升用户体验
 
 ## 🚀 快速开始
 
@@ -56,19 +71,31 @@ docker run --rm xmap -h
 
 ```bash
 # 扫描单个目标
-xmap -target 192.168.1.1
+xmap -t 192.168.1.1
+
+# 扫描多个目标
+xmap -t 192.168.1.1,192.168.1.2
 
 # 扫描多个端口
-xmap -target 192.168.1.1 -ports 80,443,8080-8090
+xmap -t 192.168.1.1 -p 80,443,8080-8090
 
 # 从文件读取目标
-xmap -target-file targets.txt
+xmap -l targets.txt
 
 # 使用快速模式
-xmap -target 192.168.1.1 -fast
+xmap -t 192.168.1.1 -f
 
-# 输出JSON格式结果
-xmap -target 192.168.1.1 -output results.json -json
+# 指定输出格式（console, json, csv）
+xmap -t 192.168.1.1 -ot json
+
+# 将结果输出到文件
+xmap -t 192.168.1.1 -o results.json -ot json
+
+# 显示详细日志
+xmap -t 192.168.1.1 -v
+
+# 更新指纹规则库
+xmap -ur
 ```
 
 ### 编程接口示例
@@ -94,7 +121,7 @@ func main() {
 	)
 
 	// 创建扫描目标
-	target := &model.ScanTarget{
+	target := &types.ScanTarget{
 		IP:       "192.168.1.1",
 		Port:     80,
 		Protocol: "tcp",
@@ -102,15 +129,32 @@ func main() {
 
 	// 执行扫描
 	ctx := context.Background()
-	result, err := xmap.Scan(ctx, target)
+	
+	// 使用回调函数处理结果
+	scanOptions := &types.ScanOptions{
+		Timeout:          5,
+		VersionIntensity: 7,
+	}
+	
+	err := xmap.ExecuteWithResultCallback(ctx, []*types.ScanTarget{target}, scanOptions,
+		func(result *types.ScanResult) {
+			// 处理结果
+			fmt.Printf("IP: %s, 端口: %d, 服务: %s\n",
+				result.Target.IP, result.Target.Port, result.Service)
+			
+			// 显示组件信息
+			for _, component := range result.Components {
+				name, _ := component["name"]
+				version, _ := component["version"]
+				fmt.Printf("\t组件: %v, 版本: %v\n", name, version)
+			}
+		},
+	)
+	
 	if err != nil {
 		fmt.Printf("扫描失败: %v\n", err)
 		return
 	}
-
-	// 处理结果
-	fmt.Printf("IP: %s, 端口: %d, 服务: %s, 版本: %s\n",
-		result.IP, result.Port, result.Service, result.Version)
 }
 ```
 
@@ -253,3 +297,5 @@ XMap 基于以下开源项目和资源：
 - [appfinger](https://github.com/tongchengbin/appfinger) - 提供Web应用指纹识别能力
 - [goflags](https://github.com/projectdiscovery/goflags) - 提供命令行参数解析
 - [gologger](https://github.com/projectdiscovery/gologger) - 提供日志记录功能
+
+

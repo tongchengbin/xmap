@@ -57,7 +57,41 @@ func (o *ConsoleOuter) Output(results *types.ScanResult) error {
 
 // displayResults 显示结果
 func (o *ConsoleOuter) displayResults(result *types.ScanResult) {
-	gologger.Print().Msgf("%s://%s:%d components: %s\n", result.Service, result.Target.IP, result.Target.Port, ComponentsToString(result.Components))
+	// 格式化组件信息
+	componentsStr := ""
+	for i, component := range result.Components {
+		if i > 0 {
+			componentsStr += ", "
+		}
+		name, hasName := component["name"]
+		version, hasVersion := component["version"]
+		
+		if hasName {
+			componentsStr += fmt.Sprintf("%v", name)
+			if hasVersion {
+				componentsStr += fmt.Sprintf(" %v", version)
+			}
+		}
+	}
+	
+	// 使用Nuclei风格的输出格式
+	// 构建目标URL
+	targetURL := fmt.Sprintf("%s://%s:%d", result.Service, result.Target.IP, result.Target.Port)
+	
+	// 根据服务类型选择不同的颜色
+	serviceColor := "\x1b[32m" // 默认绿色
+	if result.Service == "https" || result.Service == "ssl" {
+		serviceColor = "\x1b[36m" // https/ssl使用青色
+	} else if result.Service == "http" {
+		serviceColor = "\x1b[33m" // http使用黄色
+	}
+	
+	// 打印格式化的结果
+	gologger.Info().Msgf("[%s] %s\x1b[0m [\x1b[36m%s\x1b[0m] [\x1b[31m%.2fs\x1b[0m]", 
+		serviceColor + result.Service, 
+		targetURL, 
+		componentsStr,
+		result.Duration)
 }
 
 // JSONOuter JSON输出实现
@@ -151,9 +185,19 @@ func truncateString(s string, maxLen int) string {
 
 func ComponentsToString(components []map[string]interface{}) string {
 	var result string
-	for _, component := range components {
-		for key, value := range component {
-			result += fmt.Sprintf("%s: %s\n", key, value)
+	for i, component := range components {
+		if i > 0 {
+			result += ", "
+		}
+		
+		name, hasName := component["name"]
+		version, hasVersion := component["version"]
+		
+		if hasName {
+			result += fmt.Sprintf("%v", name)
+			if hasVersion {
+				result += fmt.Sprintf(" %v", version)
+			}
 		}
 	}
 	return result
