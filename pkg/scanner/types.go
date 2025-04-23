@@ -3,7 +3,6 @@ package scanner
 import (
 	"context"
 	"fmt"
-	"net"
 	"time"
 )
 
@@ -19,43 +18,30 @@ const (
 
 // Target 表示扫描目标
 type Target struct {
-	// IP地址
-	IP string
+	// 主机名（原始输入）
+	Host string `json:"host"`
+	// IP地址（可能是主机名或原始 IP 输入）
+	IP string `json:"ip"`
 	// 端口
-	Port int
+	Port int `json:"port"`
 	// 协议
-	Protocol Protocol
+	Protocol Protocol `json:"protocol"`
 	// 状态检查器，用于跟踪连接状态
-	StatusCheck *PortStatusCheck
+	StatusCheck *PortStatusCheck `json:"-"`
 }
 
 func (t *Target) String() string {
-	return fmt.Sprintf("%s:%d", t.IP, t.Port)
+	return fmt.Sprintf("%s:%d", t.Host, t.Port)
 }
 
 // NewTarget 创建新的扫描目标
 func NewTarget(ip string, port int, protocol Protocol) *Target {
 	return &Target{
-		IP:          ip,
+		Host:        ip, // 保存原始输入作为 Host
 		Port:        port,
 		Protocol:    protocol,
 		StatusCheck: &PortStatusCheck{},
 	}
-}
-
-// ParseTarget 解析目标字符串，格式为 ip:port 或 ip:port/protocol
-func ParseTarget(target string, defaultProtocol Protocol) (*Target, error) {
-	host, port, err := net.SplitHostPort(target)
-	if err != nil {
-		return nil, err
-	}
-
-	portInt, err := net.LookupPort(string(defaultProtocol), port)
-	if err != nil {
-		return nil, err
-	}
-
-	return NewTarget(host, portInt, defaultProtocol), nil
 }
 
 // ScanStatus 扫描结果状态
