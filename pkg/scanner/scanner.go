@@ -299,16 +299,15 @@ func (s *ServiceScanner) executeTCPProbe(ctx context.Context, target *types.Scan
 	_, err = conn.Write(raw)
 
 	if useSSL {
-		gologger.Debug().Msgf("Sent %d bytes to [ssl://%s:%d]", len(raw), target.IP, target.Port)
+		gologger.Debug().Msgf("Send %s %d bytes to [ssl://%s:%d]", probe.Name, len(raw), target.IP, target.Port)
 	} else {
-		gologger.Debug().Msgf("Sent %d bytes to [tcp://%s:%d]", len(raw), target.IP, target.Port)
+		gologger.Debug().Msgf("Send %s %d bytes to [tcp://%s:%d]", probe.Name, len(raw), target.IP, target.Port)
 	}
 
 	if err != nil {
 		gologger.Debug().Msgf("TCP write failed for [%s:%d]: %v", target.IP, target.Port, err)
 		return nil, types.ParseNetworkError(err)
 	}
-
 	response, err := s.readResponse(conn, options)
 
 	if len(response) > 0 {
@@ -487,7 +486,7 @@ func (s *ServiceScanner) readResponse(conn net.Conn, options *ScanOptions) ([]by
 		// 设置单次读取超时
 		remainingTime := maxReadTime.Sub(time.Now())
 		if remainingTime <= 0 {
-			remainingTime = 100 * time.Millisecond // 最小超时时间
+			remainingTime = 2 * time.Second // 最小超时时间
 		}
 		_ = conn.SetReadDeadline(time.Now().Add(remainingTime))
 		// 读取数据

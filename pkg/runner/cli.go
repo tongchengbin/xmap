@@ -78,6 +78,7 @@ func ParseOptions() (*Options, error) {
 		flagSet.BoolVarP(&versionFlag, "version", "V", false, "显示版本信息"),
 		flagSet.BoolVarP(&examplesFlag, "examples", "e", false, "显示使用示例"),
 		flagSet.BoolVar(&options.EnablePprof, "enable-pprof", false, "启用性能分析"),
+		
 	)
 
 	// 解析命令行参数
