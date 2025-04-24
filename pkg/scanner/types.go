@@ -16,17 +16,6 @@ const (
 	UDP Protocol = "UDP"
 )
 
-// NewTarget 创建新的扫描目标
-func NewTarget(ip string, port int, protocol Protocol) *types.ScanTarget {
-	return &types.ScanTarget{
-		Host:        ip, // 保存原始输入作为 Host
-		Port:        port,
-		Protocol:    string(protocol),
-		StatusCheck: &types.PortStatusCheck{},
-	}
-}
-
-
 // Scanner 定义扫描器接口
 type Scanner interface {
 	// Scan 扫描单个目标

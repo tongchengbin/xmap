@@ -338,7 +338,7 @@ func TestSSHScan(t *testing.T) {
 	result, err := xmap.Scan(ctx, &types.ScanTarget{
 		IP:       server.GetIP(),
 		Port:     server.GetPort(),
-		Protocol: string(scanner.TCP),
+		Protocol: "tcp",
 	})
 	assert.NoError(t, err, "扫描失败")
 
@@ -367,7 +367,7 @@ func TestHTTPScan(t *testing.T) {
 	result, err := xmap.Scan(ctx, &types.ScanTarget{
 		IP:       server.GetIP(),
 		Port:     server.GetPort(),
-		Protocol: string(scanner.TCP),
+		Protocol: "tcp",
 	})
 	assert.NoError(t, err, "扫描失败")
 
@@ -397,7 +397,7 @@ func TestTimeoutScan(t *testing.T) {
 	result, err := xmap.Scan(ctx, &types.ScanTarget{
 		IP:       server.GetIP(),
 		Port:     server.GetPort(),
-		Protocol: string(scanner.TCP),
+		Protocol: "tcp",
 	})
 	assert.NoError(t, err)
 	assert.True(t, result.Duration > 10)

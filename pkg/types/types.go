@@ -22,7 +22,7 @@ const (
 // ScanTarget 表示扫描目标
 type ScanTarget struct {
 	// Web 场景下的协议（http/https），与 Protocol (tcp/udp) 区分
-	Scheme string `json:"-"` 
+	Scheme string `json:"-"`
 	// 原始输入（用户提供的字符串）
 	Raw string `json:"raw,omitempty"`
 	// 解析后的信息
@@ -44,33 +44,36 @@ func (t *ScanTarget) String() string {
 
 // ScanResult 表示扫描结果
 type ScanResult struct {
-	// Web 扫描相关字段
-	URL           string                             `json:"url,omitempty"`
-	Banner        interface{}                        `json:"banner,omitempty"`
-	// 通用组件信息
-	Components    []map[string]interface{}           `json:"components,omitempty"`
 	// 目标信息
-	Target *ScanTarget
-	// 服务名称
-	Service string
-	// 是否使用SSL
-	SSL bool
-	// 附加信息
-	Extra map[string]interface{}
+	Target *ScanTarget `json:"-"`
+	// Protocol
+	Protocol string `json:"protocol"`
 	// 主机名
-	Hostname    string
+	Hostname string `json:"hostname"` // 域名或IP
+	Port     int    `json:"port"`
+	IP       string `json:"ip,omitempty"` // 解析IP，可能为空
+	// Web 扫描相关字段
+	URL    string                 `json:"url,omitempty"`
+	Banner map[string]interface{} `json:"banner,omitempty"`
+	// 通用组件信息
+	Components []map[string]interface{} `json:"components,omitempty"`
+	// 服务名称
+	Service string `json:"service"`
+	// 是否使用SSL
+	SSL bool `json:"ssl"`
+	// 附加信息
+	Extra       map[string]interface{} `json:"extra,omitempty"`
 	RawResponse []byte
 	// 匹配的探针名称
-	MatchedProbe string
+	MatchedProbe string `json:"matched_probe"`
 	// 匹配的正则表达式
-	MatchedPattern string
+	MatchedPattern string `json:"matched_pattern"`
 	// 扫描耗时
-	Duration float64
+	Duration float64 `json:"duration"`
 	// 错误信息
 	Error error
 	// 扫描状态
-	Status ScanStatus
-
+	Status    ScanStatus `json:"status"`
 	startTime time.Time
 	endTime   time.Time
 }
@@ -118,7 +121,6 @@ func (r *ScanResult) SetMatchResult(probeName, service, pattern string, softMatc
 	r.MatchedProbe = probeName
 	r.MatchedPattern = pattern
 }
-
 
 // ScanOptions 表示扫描选项
 type ScanOptions struct {

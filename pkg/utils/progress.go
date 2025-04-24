@@ -28,7 +28,7 @@ func NewProgress(name string, total int) *Progress {
 
 // Start 开始显示进度
 func (p *Progress) Start() {
-	ticker := time.NewTicker(1 * time.Second) // 每秒更新一次，与Nuclei类似
+	ticker := time.NewTicker(5 * time.Second) // 每秒更新一次，与Nuclei类似
 	defer ticker.Stop()
 
 	for {
@@ -56,7 +56,7 @@ func (p *Progress) Increment() {
 func (p *Progress) printProgress() {
 	completed := atomic.LoadInt32(&p.completed)
 	percentage := float64(completed) / float64(p.total) * 100
-	
+
 	// 计算成功和失败数量（简化实现）
 	success := completed
 	failed := 0

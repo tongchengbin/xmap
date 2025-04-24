@@ -1,8 +1,10 @@
 package output
 
 import (
+	"bufio"
 	"fmt"
 	"os"
+	"sync"
 
 	"github.com/projectdiscovery/gologger"
 
@@ -19,14 +21,34 @@ type Outer interface {
 type ConsoleOuter struct {
 	OutputFile string
 	Silent     bool
+
+	// 文件写入相关
+	file   *os.File
+	writer *bufio.Writer
+	mutex  *sync.Mutex
 }
 
 // NewConsoleOuter 创建一个新的控制台输出器
 func NewConsoleOuter(outputFile string, silent bool) *ConsoleOuter {
-	return &ConsoleOuter{
+	outer := &ConsoleOuter{
 		OutputFile: outputFile,
 		Silent:     silent,
+		mutex:      &sync.Mutex{},
 	}
+
+	// 如果指定了输出文件，初始化文件写入器
+	if outputFile != "" {
+		// 使用 O_TRUNC 模式，如果文件存在则先清空
+		file, err := os.OpenFile(outputFile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+		if err == nil {
+			outer.file = file
+			outer.writer = bufio.NewWriter(file)
+		} else {
+			gologger.Error().Msgf("Could not create output file '%s': %s", outputFile, err)
+		}
+	}
+
+	return outer
 }
 
 // Output 实现Outer接口
@@ -35,32 +57,9 @@ func (o *ConsoleOuter) Output(results *types.ScanResult) error {
 		return nil
 	}
 
-	// 如果指定了输出文件，则输出到文件
-	if o.OutputFile != "" {
-		file, err := os.Create(o.OutputFile)
-		if err != nil {
-			return err
-		}
-		defer file.Close()
-
-		// 重定向标准输出到文件
-		oldStdout := os.Stdout
-		os.Stdout = file
-		o.displayResults(results)
-		os.Stdout = oldStdout
-		return nil
-	}
-
-	// 否则输出到控制台
-	o.displayResults(results)
-	return nil
-}
-
-// displayResults 显示结果
-func (o *ConsoleOuter) displayResults(result *types.ScanResult) {
 	// 格式化组件信息
 	componentsStr := ""
-	for i, component := range result.Components {
+	for i, component := range results.Components {
 		if i > 0 {
 			componentsStr += ", "
 		}
@@ -75,64 +74,151 @@ func (o *ConsoleOuter) displayResults(result *types.ScanResult) {
 		}
 	}
 
-	// 使用Nuclei风格的输出格式
 	// 构建目标URL
-	targetURL := fmt.Sprintf("%s://%s:%d", result.Service, result.Target.Host, result.Target.Port)
+	targetURL := fmt.Sprintf("%s://%s:%d", results.Service, results.Target.Host, results.Target.Port)
 
 	// 根据服务类型选择不同的颜色
 	serviceColor := "\x1b[32m" // 默认绿色
-	if result.Service == "https" || result.Service == "ssl" {
+	if results.Service == "https" || results.Service == "ssl" {
 		serviceColor = "\x1b[36m" // https/ssl使用青色
-	} else if result.Service == "http" {
+	} else if results.Service == "http" {
 		serviceColor = "\x1b[33m" // http使用黄色
 	}
 
-	// 打印格式化的结果
-	gologger.Info().Msgf("[%s] %s\x1b[0m [\x1b[36m%s\x1b[0m] [\x1b[31m%.2fs\x1b[0m]",
-		serviceColor+result.Service,
+	// 格式化的结果字符串
+	outputStr := fmt.Sprintf("[%s] %s\x1b[0m [\x1b[36m%s\x1b[0m] [\x1b[31m%.2fs\x1b[0m]\n",
+		serviceColor+results.Service,
 		targetURL,
 		componentsStr,
-		result.Duration)
+		results.Duration)
+
+	// 如果有输出文件，写入文件
+	if o.file != nil && o.writer != nil {
+		o.mutex.Lock()
+		defer o.mutex.Unlock()
+
+		// 写入到缓冲区
+		_, err := o.writer.WriteString(outputStr)
+		if err != nil {
+			return err
+		}
+
+		// 立即刷新缓冲区到文件
+		err = o.writer.Flush()
+		if err != nil {
+			return err
+		}
+	} else {
+		// 输出到控制台
+		fmt.Print(outputStr)
+	}
+
+	return nil
+}
+
+// Close 关闭输出器
+func (o *ConsoleOuter) Close() error {
+	if o.file != nil {
+		// 先刷新缓冲区
+		if o.writer != nil {
+			o.mutex.Lock()
+			err := o.writer.Flush()
+			o.mutex.Unlock()
+			if err != nil {
+				return err
+			}
+		}
+
+		// 关闭文件
+		err := o.file.Close()
+		o.file = nil
+		o.writer = nil
+		return err
+	}
+	return nil
 }
 
 // JSONOuter JSON输出实现
 type JSONOuter struct {
 	OutputFile string
+
+	// 文件写入相关
+	file   *os.File
+	writer *bufio.Writer
+	mutex  *sync.Mutex
 }
 
 // NewJSONOuter 创建一个新的JSON输出器
 func NewJSONOuter(outputFile string) *JSONOuter {
-	return &JSONOuter{
+	outer := &JSONOuter{
 		OutputFile: outputFile,
+		mutex:      &sync.Mutex{},
 	}
+
+	// 如果指定了输出文件，初始化文件写入器
+	if outputFile != "" {
+		// 使用 O_TRUNC 模式，如果文件存在则先清空
+		file, err := os.OpenFile(outputFile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+		if err == nil {
+			outer.file = file
+			outer.writer = bufio.NewWriter(file)
+		} else {
+			gologger.Error().Msgf("Could not create output file '%s': %s", outputFile, err)
+		}
+	}
+
+	return outer
 }
 
 // Output 实现Outputter接口
 func (o *JSONOuter) Output(results *types.ScanResult) error {
-	// 如果指定了输出文件，则输出到文件
-	if o.OutputFile != "" {
-		file, err := os.Create(o.OutputFile)
+	// 获取JSON字符串
+	jsonStr := results.JSON() + "\n"
+
+	// 如果有输出文件，写入文件
+	if o.file != nil && o.writer != nil {
+		o.mutex.Lock()
+		defer o.mutex.Unlock()
+
+		// 写入到缓冲区
+		_, err := o.writer.WriteString(jsonStr)
 		if err != nil {
 			return err
 		}
-		defer file.Close()
 
-		// 重定向标准输出到文件
-		oldStdout := os.Stdout
-		os.Stdout = file
-		o.printJSON(results)
-		os.Stdout = oldStdout
-		return nil
+		// 立即刷新缓冲区到文件
+		err = o.writer.Flush()
+		if err != nil {
+			return err
+		}
+	} else {
+		// 输出到控制台
+		fmt.Print(jsonStr)
 	}
 
-	// 否则输出到控制台
-	o.printJSON(results)
 	return nil
 }
 
-// printJSON 打印JSON格式结果
-func (o *JSONOuter) printJSON(results *types.ScanResult) {
-	fmt.Println(results.JSON())
+// Close 关闭输出器
+func (o *JSONOuter) Close() error {
+	if o.file != nil {
+		// 先刷新缓冲区
+		if o.writer != nil {
+			o.mutex.Lock()
+			err := o.writer.Flush()
+			o.mutex.Unlock()
+			if err != nil {
+				return err
+			}
+		}
+
+		// 关闭文件
+		err := o.file.Close()
+		o.file = nil
+		o.writer = nil
+		return err
+	}
+	return nil
 }
 
 // CSVOuter CSV输出实现
@@ -151,7 +237,8 @@ func NewCSVOuter(outputFile string) *CSVOuter {
 func (o *CSVOuter) Output(results *types.ScanResult) error {
 	// 如果指定了输出文件，则输出到文件
 	if o.OutputFile != "" {
-		file, err := os.Create(o.OutputFile)
+		// 使用 O_APPEND 模式打开文件，如果文件不存在则创建
+		file, err := os.OpenFile(o.OutputFile, os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
 			return err
 		}

@@ -177,20 +177,16 @@ func (x *XMap) Scan(ctx context.Context, target *types.ScanTarget, options ...*t
 	if len(options) > 0 && options[0] != nil {
 		opts = options[0]
 	}
-	// 转换目标
-	scannerTarget := scanner.NewTarget(target.Host, target.Port, scanner.Protocol(target.Protocol))
 
 	// 创建扫描选项
 	scanOptions := x.createScanOptions(opts)
 
 	// 执行扫描
-	result, err := x.scanner.ScanWithContext(ctx, scannerTarget, scanOptions...)
+	result, err := x.scanner.ScanWithContext(ctx, target, scanOptions...)
 	if err != nil {
 		return nil, err
 	}
-	// 转换结果
-	modelResult := x.convertResult(result, target)
-
+	x.convertResult(result)
 	// 如果是Web服务，执行Web扫描
 	if web.ShouldScan(result.Service) && x.webScanner != nil {
 		// 设置Web扫描器选项
@@ -201,110 +197,17 @@ func (x *XMap) Scan(ctx context.Context, target *types.ScanTarget, options ...*t
 			x.webScanner.SetProxy(opts.Proxy)
 		}
 		// 执行Web扫描
-		url := fmt.Sprintf("%s://%s:%d", modelResult.Service, modelResult.Target.IP, modelResult.Target.Port)
+		url := fmt.Sprintf("%s://%s:%d", result.Service, result.Target.IP, result.Target.Port)
 		webResult, err := x.webScanner.ScanWithContext(ctx, url)
 		if err != nil {
 			gologger.Debug().Msgf("Web扫描失败: %v", err)
 		} else {
 			// 使用Web扫描结果丰富结果
-			x.enrichResultWithWebData(modelResult, webResult)
+			x.enrichResultWithWebData(result, webResult)
 		}
 	}
 
-	return modelResult, nil
-}
-
-// ExecuteWithOptions 使用指定选项执行批量扫描
-func (x *XMap) ExecuteWithOptions(ctx context.Context, targets []*types.ScanTarget, options *types.ScanOptions, progressCallback func(completed, total int, percentage float64, status string)) ([]*types.ScanResult, error) {
-	if options == nil {
-		options = &types.ScanOptions{}
-	}
-
-	// 设置默认并行数
-	if options.MaxParallelism <= 0 {
-		options.MaxParallelism = 10
-	}
-
-	totalTargets := len(targets)
-
-	// 创建上下文，支持取消
-	scanCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	// 创建信号量，控制并行度
-	sem := make(chan struct{}, options.MaxParallelism)
-
-	// 创建结果通道和等待组
-	resultChan := make(chan *types.ScanResult, options.MaxParallelism*2)
-	var wg sync.WaitGroup
-
-	// 启动结果收集协程
-	results := make([]*types.ScanResult, 0, totalTargets)
-	done := make(chan struct{})
-
-	// 进度跟踪变量
-	completedTargets := 0
-	successTargets := 0
-	failedTargets := 0
-
-	go func() {
-		for result := range resultChan {
-			results = append(results, result)
-			// 更新进度
-			completedTargets++
-			if result.Error == "" {
-				successTargets++
-			} else {
-				failedTargets++
-			}
-
-		}
-		close(done)
-	}()
-
-	// 启动扫描协程
-	for i, target := range targets {
-		wg.Add(1)
-		sem <- struct{}{} // 获取信号量
-
-		go func(i int, target *types.ScanTarget) {
-			defer func() {
-				<-sem // 释放信号量
-				wg.Done()
-			}()
-
-			// 检查上下文是否已取消
-			if scanCtx.Err() != nil {
-				resultChan <- &types.ScanResult{
-					Target: target,
-					Error:  "scan canceled",
-				}
-				return
-			}
-
-			// 执行扫描
-			result, err := x.Scan(scanCtx, target, options)
-			if err != nil {
-				resultChan <- &types.ScanResult{
-					Target: target,
-					Error:  err.Error(),
-				}
-				return
-			}
-
-			// 发送结果
-			resultChan <- result
-		}(i, target)
-	}
-
-	// 等待所有扫描完成
-	wg.Wait()
-	close(resultChan)
-
-	// 等待结果处理完成
-	<-done
-
-	return results, nil
+	return result, nil
 }
 
 // ExecuteWithResultCallback 使用指定选项执行批量扫描，并实时回调每个扫描结果
@@ -348,7 +251,7 @@ func (x *XMap) ExecuteWithResultCallback(
 			if scanCtx.Err() != nil {
 				result := &types.ScanResult{
 					Target: target,
-					Error:  "scan canceled",
+					Error:  scanCtx.Err(),
 				}
 				handleResult(result)
 				return
@@ -358,7 +261,7 @@ func (x *XMap) ExecuteWithResultCallback(
 			if err != nil {
 				result = &types.ScanResult{
 					Target: target,
-					Error:  err.Error(),
+					Error:  err,
 				}
 			}
 			// 处理结果
@@ -447,43 +350,43 @@ func (x *XMap) enrichResultWithWebData(result *types.ScanResult, webResult *web.
 		return
 	}
 	// 确保Metadata已初始化
-	if result.Metadata == nil {
-		result.Metadata = make(map[string]interface{})
+	if result.Banner == nil {
+		result.Banner = make(map[string]interface{})
 	}
 	// 添加Banner信息到Metadata
 	if webResult.Banner != nil {
 		// 添加标题
 		if webResult.Banner.Title != "" {
-			result.Metadata["title"] = webResult.Banner.Title
+			result.Banner["title"] = webResult.Banner.Title
 		}
 		// 添加状态码
 		if webResult.Banner.StatusCode > 0 {
-			result.Metadata["status_code"] = webResult.Banner.StatusCode
+			result.Banner["status_code"] = webResult.Banner.StatusCode
 		}
 		// 如果有HTTP响应体，添加到Metadata
 		if webResult.Banner.Body != "" {
-			result.Metadata["body"] = webResult.Banner.Body
+			result.Banner["body"] = webResult.Banner.Body
 		}
 		if webResult.Banner.IconBytes != nil {
-			result.Metadata["icon"] = base64.StdEncoding.EncodeToString(webResult.Banner.IconBytes)
+			result.Banner["icon"] = base64.StdEncoding.EncodeToString(webResult.Banner.IconBytes)
 		}
 		if webResult.Banner.Certificate != "" {
-			result.Metadata["certificate"] = webResult.Banner.Certificate
+			result.Banner["certificate"] = webResult.Banner.Certificate
 		}
 		if webResult.Banner.Charset != "" {
-			result.Metadata["charset"] = webResult.Banner.Charset
+			result.Banner["charset"] = webResult.Banner.Charset
 		}
 		if webResult.Banner.Header != "" {
-			result.Metadata["header"] = webResult.Banner.Header
+			result.Banner["header"] = webResult.Banner.Header
 		}
 		if webResult.Banner.IconType != "" {
-			result.Metadata["icon_type"] = webResult.Banner.IconType
+			result.Banner["icon_type"] = webResult.Banner.IconType
 		}
 		if webResult.Banner.IconHash > 0 {
-			result.Metadata["icon_hash"] = webResult.Banner.IconHash
+			result.Banner["icon_hash"] = webResult.Banner.IconHash
 		}
 		if webResult.Banner.BodyHash > 0 {
-
+			result.Banner["body_hash"] = webResult.Banner.BodyHash
 		}
 	}
 	// 添加指纹信息
@@ -502,58 +405,29 @@ func (x *XMap) enrichResultWithWebData(result *types.ScanResult, webResult *web.
 }
 
 // convertResult 转换扫描结果
-func (x *XMap) convertResult(result *scanner.ScanResult, target *types.ScanTarget) *types.ScanResult {
-	if result == nil {
-		return nil
+func (x *XMap) convertResult(result *types.ScanResult) {
+	result.Protocol = result.Target.Protocol
+	result.Hostname = result.Target.Host
+	// 设置端口
+	result.Port = result.Target.Port
+	if result.IP == "" && result.Target.IP != "" {
+		result.IP = result.Target.IP
 	}
-
-	// 创建模型结果
-	modelResult := &types.ScanResult{
-		Target: &types.ScanTarget{
-			Host:     target.Host,
-			Port:     target.Port,
-			Protocol: target.Protocol,
-		},
-		Service:      result.Service,
-		MatchedProbe: result.MatchedProbe,
-		Components:   []map[string]interface{}{},
-		Duration:     result.Duration,
-		Metadata:     make(map[string]interface{}),
-	}
-
 	if result.Extra != nil && len(result.Extra) > 0 {
 		// fix product to name
 		if name, ok := result.Extra["product"]; ok {
 			result.Extra["name"] = name
 			delete(result.Extra, "product")
-			modelResult.Components = append(modelResult.Components, result.Extra)
+			result.Components = append(result.Components, result.Extra)
 		}
 	}
 	if result.Service == "http" && result.SSL {
-		modelResult.Service = "https"
-	}
-	// 设置错误信息
-	if result.Error != nil {
-		modelResult.Error = result.Error.Error()
+		result.Service = "https"
 	}
 	// 设置原始响应数据
 	if result.RawResponse != nil && len(result.RawResponse) > 0 {
-		modelResult.Metadata["tcp_banner"] = base64.StdEncoding.EncodeToString(result.RawResponse)
+		result.Banner["tcp_banner"] = base64.StdEncoding.EncodeToString(result.RawResponse)
 	}
-
-	return modelResult
-}
-
-// ExecuteWithTargetsString 使用目标字符串执行批量扫描
-func (x *XMap) ExecuteWithTargetsString(ctx context.Context, targetsStr string, options *types.ScanOptions, progressCallback func(completed, total int, percentage float64, status string)) ([]*types.ScanResult, error) {
-	// 解析目标字符串
-	targets, err := x.ParseTargetsString(targetsStr)
-	if err != nil {
-		return nil, err
-	}
-
-	// 执行扫描
-	return x.ExecuteWithOptions(ctx, targets, options, progressCallback)
 }
 
 // ParseTargetsString 将目标字符串解析为ScanTarget切片

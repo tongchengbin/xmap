@@ -16,7 +16,6 @@ import (
 	"github.com/tongchengbin/xmap/pkg/types"
 )
 
-
 // ServiceScanner 默认扫描器实现
 type ServiceScanner struct {
 	// 默认选项
@@ -554,4 +553,3 @@ func formatProbeData(data []byte) string {
 func replaceProbeRaw(raw []byte, target *types.ScanTarget) []byte {
 	return []byte(strings.ReplaceAll(string(raw), "{Host}", fmt.Sprintf("%s:%d", target.IP, target.Port)))
 }
-
