@@ -10,8 +10,6 @@ import (
 
 	"github.com/projectdiscovery/gologger"
 	"github.com/projectdiscovery/gologger/levels"
-	"github.com/tongchengbin/xmap/pkg/scanner"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/tongchengbin/xmap/pkg/api"
 	"github.com/tongchengbin/xmap/pkg/types"
@@ -418,7 +416,7 @@ func TestRemoteWaf(t *testing.T) {
 	result, err := xmap.Scan(ctx, &types.ScanTarget{
 		IP:       "frp.lostpeach.cn",
 		Port:     443,
-		Protocol: string(scanner.TCP),
+		Protocol: "tcp",
 	})
 	println(result, err)
 }
@@ -437,7 +435,7 @@ func TestScanWithWaf(t *testing.T) {
 	result, err := xmap.Scan(ctx, &types.ScanTarget{
 		IP:       "frp.lostpeach.cn",
 		Port:     3001,
-		Protocol: string(scanner.TCP),
+		Protocol: "tc",
 	})
 	if err != nil {
 		println(err.Error())

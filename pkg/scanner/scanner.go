@@ -275,7 +275,7 @@ func (s *ServiceScanner) executeTCPProbes(ctx context.Context, target *types.Sca
 	return errors.New("not matched")
 }
 
-// executeTCPProbe 执行 TCP 探针
+// executeTCPProbe 执行 tcp 探针
 func (s *ServiceScanner) executeTCPProbe(ctx context.Context, target *types.ScanTarget, probe *probe.Probe, useSSL bool, options *ScanOptions) ([]byte, types.ErrorType) {
 	// 创建连接超时上下文
 	timeoutCtx, cancel := context.WithTimeout(ctx, options.Timeout)

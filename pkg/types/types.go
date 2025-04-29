@@ -3,6 +3,8 @@ package types
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -35,6 +37,91 @@ type ScanTarget struct {
 	Parsed bool `json:"-"`
 	// 状态检查器，用于跟踪连接状态，不输出到JSON
 	StatusCheck interface{} `json:"-"`
+}
+
+func NewTarget(raw string) *ScanTarget {
+	// 判断目标类型
+	/*
+		IP:PORT
+		DOMAIN:PORT
+		scheme://DOMAIN:PORT
+		scheme://IP:PORT
+		udp://DOMAIN:PORT
+		tcp://DOMAIN:PORT
+	*/
+	target := &ScanTarget{
+		Raw:      raw,
+		Protocol: "tcp", // 默认协议为TCP
+	}
+
+	// 检查是否包含协议前缀
+	if parts := strings.Split(raw, "://"); len(parts) > 1 {
+		scheme := strings.ToLower(parts[0])
+		host := parts[1]
+
+		// 处理协议
+		switch scheme {
+		case "http", "https":
+			target.Scheme = scheme
+			target.Protocol = "tcp"
+		case "tcp", "udp":
+			target.Protocol = scheme
+		default:
+			// 未知协议，使用默认TCP
+			target.Protocol = "tcp"
+		}
+
+		// 处理路径
+		if pathIndex := strings.Index(host, "/"); pathIndex != -1 {
+			target.Path = host[pathIndex:]
+			host = host[:pathIndex]
+		}
+
+		// 解析主机和端口
+		if hostPort := strings.Split(host, ":"); len(hostPort) > 1 {
+			target.Host = hostPort[0]
+			port, err := strconv.Atoi(hostPort[1])
+			if err == nil && port > 0 && port < 65536 {
+				target.Port = port
+			} else {
+				// 无效端口，使用默认端口
+				if target.Scheme == "https" {
+					target.Port = 443
+				} else {
+					target.Port = 80
+				}
+			}
+		} else {
+			target.Host = host
+			// 根据协议设置默认端口
+			if target.Scheme == "https" {
+				target.Port = 443
+			} else {
+				target.Port = 80
+			}
+		}
+	} else {
+		// 没有协议前缀，检查是否有端口
+		if hostPort := strings.Split(raw, ":"); len(hostPort) > 1 {
+			target.Host = hostPort[0]
+			port, err := strconv.Atoi(hostPort[1])
+			if err == nil && port > 0 && port < 65536 {
+				target.Port = port
+			} else {
+				// 无效端口，使用默认端口
+				target.Port = 80
+			}
+		} else {
+			// 只有主机名，使用默认端口
+			target.Host = raw
+			target.Port = 80
+		}
+	}
+
+	// 标记为已解析
+	target.Parsed = true
+
+	return target
 }
 
 // String 返回目标的字符串表示

@@ -87,28 +87,6 @@ func printResult(result *types.ScanResult) {
 	fmt.Printf("目标:     %s:%d\n", result.Target.IP, result.Target.Port)
 	fmt.Printf("协议:     %s\n", result.Target.Protocol)
 	fmt.Println("----------------------------------------")
-
-	if result.Error != "" {
-		fmt.Printf("错误:     %s\n", result.Error)
-		return
-	}
-
-	if result.Service != "" {
-		fmt.Printf("服务:     %s\n", result.Service)
-	}
-
-	if result.Hostname != "" {
-		fmt.Printf("主机名:   %s\n", result.Hostname)
-	}
-
-	if result.MatchedProbe != "" {
-		fmt.Printf("匹配探针: %s\n", result.MatchedProbe)
-	}
-
-	if result.MatchedService != "" {
-		fmt.Printf("匹配服务: %s\n", result.MatchedService)
-	}
-
 	fmt.Printf("扫描耗时: %s\n", result.Duration)
 	fmt.Println("----------------------------------------")
 }
