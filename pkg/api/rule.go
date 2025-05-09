@@ -12,13 +12,11 @@ import (
 func InitRuleManager(fingerprintsPath string) error {
 	// 获取规则管理器实例
 	ruleManager := rule.GetRuleManager()
-
 	// 检查规则库是否已加载
 	if ruleManager.IsLoaded() {
 		gologger.Debug().Msgf("指纹库已加载，上次加载时间: %s", ruleManager.GetLastLoadTime().Format("2006-01-02 15:04:05"))
 		return nil
 	}
-
 	// 如果未指定指纹库路径，使用默认路径
 	if fingerprintsPath == "" {
 		// 尝试几个可能的路径

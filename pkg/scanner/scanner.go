@@ -2,7 +2,6 @@ package scanner
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -11,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/projectdiscovery/fastdialer/fastdialer"
 	"github.com/projectdiscovery/gologger"
 	"github.com/tongchengbin/xmap/pkg/probe"
 	"github.com/tongchengbin/xmap/pkg/types"
@@ -22,6 +22,8 @@ type ServiceScanner struct {
 	defaultOptions *ScanOptions
 	// 版本强度
 	probeManager *probe.Manager
+	// fastdialer实例
+	dialer *fastdialer.Dialer
 }
 
 // NewServiceScanner 创建新的扫描器
@@ -41,10 +43,26 @@ func NewServiceScanner(options ...ScanOption) (*ServiceScanner, error) {
 		gologger.Error().Msgf("获取指纹管理器失败: %v", err)
 		return nil, err
 	}
+
+	// 创建fastdialer实例
+	fdOptions := fastdialer.DefaultOptions
+	// 使用系统默认DNS
+	fdOptions.EnableFallback = true
+	// 使用内存缓存
+	fdOptions.CacheType = fastdialer.Memory
+	fdOptions.CacheMemoryMaxItems = 1000
+
+	fd, err := fastdialer.NewDialer(fdOptions)
+	if err != nil {
+		gologger.Error().Msgf("创建fastdialer失败: %v", err)
+		return nil, err
+	}
+
 	// 创建扫描器
 	scanner := &ServiceScanner{
 		defaultOptions: defaultOptions,
 		probeManager:   probeManager,
+		dialer:         fd,
 	}
 
 	return scanner, nil
@@ -296,8 +314,8 @@ func (s *ServiceScanner) executeTCPProbe(ctx context.Context, target *types.Scan
 	_ = conn.SetDeadline(time.Now().Add(options.Timeout))
 
 	raw := replaceProbeRaw(probe.SendData, target)
+	println(string(raw))
 	_, err = conn.Write(raw)
-
 	if useSSL {
 		gologger.Debug().Msgf("Send %s %d bytes to [ssl://%s:%d]", probe.Name, len(raw), target.IP, target.Port)
 	} else {
@@ -380,7 +398,6 @@ func (s *ServiceScanner) executeUDPProbe(ctx context.Context, target *types.Scan
 		// UDP 错误可能是端口过滤或关闭的标志
 		gologger.Debug().Msgf("UDP read failed for [%s:%d]: %v", target.IP, target.Port, err)
 		return response, types.ParseNetworkError(err)
-		return response, types.ParseNetworkError(err)
 	}
 
 	return response, types.ErrNil
@@ -391,6 +408,10 @@ func (s *ServiceScanner) createConnection(ctx context.Context, target *types.Sca
 	// 构建连接地址
 	address := fmt.Sprintf("%s:%d", target.Host, target.Port)
 
+	// 使用fastdialer处理连接
+	var conn net.Conn
+	var err error
+
 	// 根据协议类型创建不同类型的连接
 	var network string
 	switch target.Protocol {
@@ -400,65 +421,46 @@ func (s *ServiceScanner) createConnection(ctx context.Context, target *types.Sca
 		network = "tcp" // 默认使用 TCP
 	}
 
-	dialer := &net.Dialer{
-		Timeout: timeout,
-	}
+	// 设置超时上下文
+	dialCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 
 	// 检查是否需要 TLS 连接
 	if useSSL {
-		// TLS 只支持 TCP
-		conn, err := dialer.DialContext(ctx, "tcp", address)
+		// 使用fastdialer的DialTLS方法进行TLS连接
+		conn, err = s.dialer.DialTLS(dialCtx, network, address)
 		if err != nil {
+			gologger.Debug().Msgf("TLS连接失败: %v", err)
 			return nil, err
 		}
-		// TLS 配置
-		tlsConfig := &tls.Config{
-			InsecureSkipVerify: true, // 跳过证书验证，用于扫描
-			MinVersion:         tls.VersionTLS10,
-			MaxVersion:         tls.VersionTLS13,
+		// 获取目标IP
+		if target.IP == "" && target.Host != "" {
+			dnsData, err := s.dialer.GetDNSData(target.Host)
+			if err == nil && dnsData != nil && len(dnsData.A) > 0 {
+				target.IP = dnsData.A[0]
+			}
 		}
-		// 升级为 TLS 连接
-		tlsConn := tls.Client(conn, tlsConfig)
-		// 设置握手超时
-		if err := tlsConn.SetDeadline(time.Now().Add(timeout)); err != nil {
-			conn.Close()
-			return nil, err
-		}
-		// 执行 TLS 握手
-		if err := tlsConn.HandshakeContext(ctx); err != nil {
-			conn.Close()
-			return nil, err
-		}
-		// 重置超时
-		if err := tlsConn.SetDeadline(time.Time{}); err != nil {
-			tlsConn.Close()
-			return nil, err
-		}
-		return tlsConn, nil
+		return conn, nil
 	}
+
 	// 普通连接（TCP 或 UDP）
-	conn, err := dialer.DialContext(ctx, network, address)
+	conn, err = s.dialer.Dial(dialCtx, network, address)
 	if err != nil {
+		gologger.Debug().Msgf("连接失败: %v", err)
 		return nil, err
 	}
 
-	// 从连接中获取实际的远程 IP 地址
-	// 根据不同的协议类型处理
-	switch actualConn := conn.(type) {
-	case *net.TCPConn:
-		if remoteAddr, ok := actualConn.RemoteAddr().(*net.TCPAddr); ok {
-			resolvedIP := remoteAddr.IP.String()
-			if target.IP == "" {
-				target.IP = resolvedIP
-				gologger.Debug().Msgf("%s:%d", resolvedIP, target.Port)
-			}
-		}
-	case *net.UDPConn:
-		if remoteAddr, ok := actualConn.RemoteAddr().(*net.UDPAddr); ok {
-			resolvedIP := remoteAddr.IP.String()
-			if target.IP == "" {
-				target.IP = resolvedIP
-				gologger.Debug().Msgf("%s:%d", resolvedIP, target.Port)
+	// 获取目标IP
+	if target.IP == "" && target.Host != "" {
+		dnsData, err := s.dialer.GetDNSData(target.Host)
+		if err == nil && dnsData != nil && len(dnsData.A) > 0 {
+			target.IP = dnsData.A[0]
+			gologger.Debug().Msgf("解析域名 %s 到IP %s", target.Host, target.IP)
+		} else {
+			// 如果无法从 DNS 获取数据，尝试从连接中获取
+			if remoteAddr, ok := conn.RemoteAddr().(*net.TCPAddr); ok {
+				target.IP = remoteAddr.IP.String()
+				gologger.Debug().Msgf("从连接获取IP: %s", target.IP)
 			}
 		}
 	}
@@ -550,5 +552,11 @@ func formatProbeData(data []byte) string {
 
 // replaceProbeRaw 替换探针原始数据中的占位符
 func replaceProbeRaw(raw []byte, target *types.ScanTarget) []byte {
-	return []byte(strings.ReplaceAll(string(raw), "{Host}", fmt.Sprintf("%s:%d", target.IP, target.Port)))
+	var host string
+	if target.Host != "" {
+		host = target.Host
+	} else {
+		host = target.IP
+	}
+	return []byte(strings.ReplaceAll(string(raw), "{Host}", fmt.Sprintf("%s:%d", host, target.Port)))
 }

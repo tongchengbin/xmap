@@ -440,5 +440,23 @@ func TestScanWithWaf(t *testing.T) {
 	if err != nil {
 		println(err.Error())
 	}
-	println(result)
+	assert.NotNil(t, result)
+}
+
+func TestScanHttps(t *testing.T) {
+	// 创建XMap实例
+	gologger.DefaultLogger.SetMaxLevel(levels.LevelDebug)
+	xmap := api.NewXMap(
+		api.WithTimeout(4*time.Second),
+		api.WithRetries(1),
+		api.WithDebugRequest(true),
+		api.WithDebugResponse(true),
+		api.WithVerbose(true),
+	)
+	ctx := context.Background()
+	target := types.NewTarget("https://www.hackerone.com/")
+	result, err := xmap.Scan(ctx, target)
+	assert.Nil(t, err)
+	assert.NotNil(t, result)
+	assert.True(t, len(result.Components) > 0)
 }

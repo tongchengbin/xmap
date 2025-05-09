@@ -177,10 +177,8 @@ func (x *XMap) Scan(ctx context.Context, target *types.ScanTarget, options ...*t
 	if len(options) > 0 && options[0] != nil {
 		opts = options[0]
 	}
-
 	// 创建扫描选项
 	scanOptions := x.createScanOptions(opts)
-
 	// 执行扫描
 	result, err := x.scanner.ScanWithContext(ctx, target, scanOptions...)
 	if err != nil {
@@ -197,7 +195,12 @@ func (x *XMap) Scan(ctx context.Context, target *types.ScanTarget, options ...*t
 			x.webScanner.SetProxy(opts.Proxy)
 		}
 		// 执行Web扫描
-		url := fmt.Sprintf("%s://%s:%d", result.Service, result.Target.IP, result.Target.Port)
+		var url string
+		if target.Host == "" {
+			url = fmt.Sprintf("%s://%s:%d", result.Service, target.IP, target.Port)
+		} else {
+			url = fmt.Sprintf("%s://%s:%d", result.Service, target.Host, target.Port)
+		}
 		webResult, err := x.webScanner.ScanWithContext(ctx, url)
 		if err != nil {
 			gologger.Debug().Msgf("Web扫描失败: %v", err)

@@ -53,7 +53,6 @@ func NewTarget(raw string) *ScanTarget {
 		Raw:      raw,
 		Protocol: "tcp", // 默认协议为TCP
 	}
-
 	// 检查是否包含协议前缀
 	if parts := strings.Split(raw, "://"); len(parts) > 1 {
 		scheme := strings.ToLower(parts[0])
@@ -70,13 +69,11 @@ func NewTarget(raw string) *ScanTarget {
 			// 未知协议，使用默认TCP
 			target.Protocol = "tcp"
 		}
-
 		// 处理路径
 		if pathIndex := strings.Index(host, "/"); pathIndex != -1 {
 			target.Path = host[pathIndex:]
 			host = host[:pathIndex]
 		}
-
 		// 解析主机和端口
 		if hostPort := strings.Split(host, ":"); len(hostPort) > 1 {
 			target.Host = hostPort[0]

@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"fmt"
+	"github.com/tongchengbin/appfinger/pkg/runner"
 	"time"
 
 	"github.com/tongchengbin/appfinger/pkg/crawl"
@@ -22,10 +23,7 @@ func NewScanner() (*Scanner, error) {
 		return nil, fmt.Errorf("规则库未加载")
 	}
 	// 创建默认选项
-	options := &crawl.Options{
-		Timeout:   10 * time.Second,
-		DebugResp: false,
-	}
+	options := crawl.DefaultOption()
 
 	return &Scanner{
 		options: options,
@@ -57,7 +55,7 @@ type ScanResult struct {
 	URL        string
 	Components map[string]map[string]string
 	Error      error
-	Banner     *rule.Banner
+	Banner     *crawl.Banner
 }
 
 // ShouldScan 判断是否应该进行Web扫描
@@ -74,12 +72,14 @@ func (s *Scanner) ScanWithContext(ctx context.Context, url string) (*ScanResult,
 	if finger == nil {
 		return nil, fmt.Errorf("指纹库未加载")
 	}
-
 	// 创建爬虫
-	crawler := crawl.NewCrawl(s.options, finger)
-
+	crawler := crawl.NewCrawler(s.options)
+	sdk, err := runner.NewRunner(crawler, rule.GetRuleManager(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("create Runner Error~")
+	}
 	// 执行匹配
-	banner, components, err := crawler.Match(url)
+	result, err := sdk.ScanWithContext(ctx, url)
 	if err != nil {
 		return &ScanResult{
 			URL:   url,
@@ -89,7 +89,7 @@ func (s *Scanner) ScanWithContext(ctx context.Context, url string) (*ScanResult,
 	// 返回结果
 	return &ScanResult{
 		URL:        url,
-		Components: components,
-		Banner:     banner,
+		Components: result.Fingerprint,
+		Banner:     result.Banner,
 	}, nil
 }
