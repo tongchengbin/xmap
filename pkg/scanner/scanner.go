@@ -314,7 +314,6 @@ func (s *ServiceScanner) executeTCPProbe(ctx context.Context, target *types.Scan
 	_ = conn.SetDeadline(time.Now().Add(options.Timeout))
 
 	raw := replaceProbeRaw(probe.SendData, target)
-	println(string(raw))
 	_, err = conn.Write(raw)
 	if useSSL {
 		gologger.Debug().Msgf("Send %s %d bytes to [ssl://%s:%d]", probe.Name, len(raw), target.IP, target.Port)
