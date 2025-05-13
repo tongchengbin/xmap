@@ -4,12 +4,15 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"github.com/dlclark/regexp2"
 	"log"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/projectdiscovery/gologger"
+
+	"github.com/dlclark/regexp2"
 )
 
 // Probe 表示一个服务探针
@@ -102,6 +105,40 @@ func (p *Probe) Match(response []byte) (*Match, map[string]interface{}) {
 		if m.VersionInfo.OS != "" {
 			extra["os"] = m.VersionInfo.OS
 		}
+		// replace extra with groups
+		for k, v := range extra {
+			// 需要类型断言将v转换为string
+			vStr, ok := v.(string)
+			if !ok {
+				// 如果不是字符串，继续下一个
+				continue
+			}
+			
+			if strings.Contains(vStr, "$") {
+				// 提取所有的$N引用
+				varPattern := regexp.MustCompile(`\$(\d+|[a-zA-Z][a-zA-Z0-9_]*)`) 
+				// 替换所有的$N引用为相应的组值
+				replacedValue := varPattern.ReplaceAllStringFunc(vStr, func(match string) string {
+					groupKey := match[1:] // 去掉$前缀
+					// 如果是数字，尝试使用索引获取
+					if groupIndex, err := strconv.Atoi(groupKey); err == nil && groupIndex < len(matcher.Groups()) {
+						group := matcher.Groups()[groupIndex]
+						// 检查group是否为空指针和长度
+						if group.Length > 0 {
+							return group.String()
+						}
+						return ""
+					}
+					// 否则使用命名组
+					if groupValue, ok := groups[groupKey]; ok {
+						return groupValue
+					}
+					return "" // 如果没有找到对应的组，返回空字符串
+				})
+				extra[k] = replacedValue
+			}
+		}
+		fmt.Printf("%v\n", extra)
 		return m, extra
 	}
 	return nil, nil
@@ -134,7 +171,7 @@ func LoadProbes(s string, versionIntensity int) []*Probe {
 		MatchGroup: make([]*Match, 0),
 	}
 	var probeList = make([]*Probe, 0)
-	lineIndex := 0
+	lineIndex := 1
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -180,7 +217,7 @@ func LoadProbes(s string, versionIntensity int) []*Probe {
 			pb.Fallback = parseStringList(line[9:])
 		}
 		if err != nil {
-			log.Println(err)
+			gologger.Debug().Msgf("parser probe line error: %v", err)
 		}
 		lineIndex++
 	}
@@ -251,12 +288,15 @@ func parseMatch(p *Probe, line string, soft bool, lineIndex int) error {
 		patternOpt = ""
 	}
 	s = s[mStart+end+len(patternOpt):]
-
 	match.Soft = soft
 	match.Service = FixProtocol(match.Service)
+	pattern = FixPattern(pattern)
 	match.Pattern = pattern
-	match.regex = getPatternRegexp(pattern, patternOpt)
-
+	var err error
+	match.regex, err = getPatternRegexp(pattern, patternOpt)
+	if err != nil {
+		return err
+	}
 	// 解析版本信息
 	if len(s) > 1 {
 		match.VersionInfo = parseVersionInfo(s)
@@ -490,4 +530,70 @@ func (ps *ProbeStore) SetFallbackProbes() {
 			}
 		}
 	}
+}
+
+// BytesToHex converts bytes to string, showing printable ASCII characters as-is
+// and other bytes in \x hex format
+func BytesToHex(b []byte) string {
+	if len(b) == 0 {
+		return ""
+	}
+	var buf strings.Builder
+	for _, v := range b {
+		if v >= 0x20 && v <= 0x7E { // printable ASCII range
+			buf.WriteByte(v)
+		} else {
+			buf.WriteString(fmt.Sprintf("\\x%02x", v))
+		}
+	}
+	return buf.String()
+}
+func FixPattern(s string) string {
+	// 处理十六进制转义序列 \xHH
+	hexPattern := regexp.MustCompile(`\\x([0-9a-fA-F]{2})`)
+	s = hexPattern.ReplaceAllStringFunc(s, func(match string) string {
+		hexStr := match[2:] // 获取十六进制部分
+		val, _ := strconv.ParseUint(hexStr, 16, 8)
+		si := string([]byte{byte(val)})
+		// 对特殊字符进行转义
+		switch si {
+		case "|":
+			return "\\|"
+		case "$":
+			return "\\$"
+		case ".":
+			return "\\."
+		case "*":
+			return "\\*"
+		case "+":
+			return "\\+"
+		case "?":
+			return "\\?"
+		case "[":
+			return "\\["
+		case "]":
+			return "\\]"
+		case "(":
+			return "\\("
+		case ")":
+			return "\\)"
+		case "{":
+			return "\\{"
+		case "}":
+			return "\\}"
+		case "^":
+			return "\\^"
+		default:
+			return si
+		}
+	})
+	// 处理八进制转义序列 \0
+	s = strings.ReplaceAll(s, "\\0", "\x00")
+	// 处理其他常见转义序列
+	s = strings.ReplaceAll(s, "\\t", "\t")
+	s = strings.ReplaceAll(s, "\\r", "\r")
+	s = strings.ReplaceAll(s, "\\n", "\n")
+	// 最后处理反斜杠本身的转义，避免影响前面的替换
+	s = strings.ReplaceAll(s, "\\\\", "\\")
+	return s
 }

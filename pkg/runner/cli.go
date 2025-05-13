@@ -8,7 +8,7 @@ import (
 )
 
 // Version 版本信息
-const Version = "v0.1.1"
+const Version = "v0.1.2"
 
 // Banner 程序的banner
 var Banner = fmt.Sprintf(`
@@ -78,7 +78,6 @@ func ParseOptions() (*Options, error) {
 		flagSet.BoolVarP(&versionFlag, "version", "V", false, "显示版本信息"),
 		flagSet.BoolVarP(&examplesFlag, "examples", "e", false, "显示使用示例"),
 		flagSet.BoolVar(&options.EnablePprof, "enable-pprof", false, "启用性能分析"),
-		
 	)
 
 	// 解析命令行参数

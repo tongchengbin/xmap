@@ -2206,7 +2206,7 @@ softmatch mtap m|^WATSON!WATSON!| p/GroupLogic MassTransit or Adobe Virtual Netw
 # Not sure how to read this version. Seen: 318DC8D9.31.32.32, 318DC8D9.32.32.3B, 318DC8D9.31.32.31
 match mentorbs m|^OCCLIENTDATA##MBSDELIM##{\"DATATYPE\":\"424538\",\"CHECKSUM\":\"[\dA-F]+\",\"DATA\":{\"MAJOR\":\"318DC8D9\",\"MINOR\":\"[\dA-F]+\",\"RELEASE\":\"[\dA-F]+\",\"BUILD\":\"[\dA-F]+\"}}##MBSENDDELIM##\r\n| p/Mentor BS On-Call/ cpe:/a:mentorbs:on-call/
 
-match meterpreter m|^\0.\x0b\0MZ\xe8\0\0\0\0\x5b\x52\x45\x55\x89\xe5\x81\xc3..\0\0\xff\xd3\x89\xc3Wh\x04\0\0\0P\xff\xd0h....h\x05\0\0\0P\xff\xd3\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0.\0\0\0\x0e\x1f\xba\x0e\0\xb4\t\xcd!\xb8\x01L\xcd!This program cannot be run in DOS mode\.\r\r\n\$\0\0\0\0\0\0\0|s p/Metasploit meterpreter/ i/**BACKDOOR**/
+match meterpreter m|^\0.\[\0MZ\xe8\0\0\0\0\x5b\x52\x45\x55\x89\xe5\x81\xc3..\0\0\xff\xd3\x89\xc3Wh\x04\0\0\0P\xff\xd0h....h\x05\0\0\0P\xff\xd3\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0.\0\0\0\x0e\x1f\xba\x0e\0\xb4\t\xcd!\xb8\x01L\xcd!This program cannot be run in DOS mode\.\r\r\n\$\0\0\0\0\0\0\0|s p/Metasploit meterpreter/ i/**BACKDOOR**/
 match meterpreter m|^\x16\x03\0\0\x59\x01\0\0\x55\x03\0................................\0\0\x28\0\x39\0\x38\0\x35\0\x16\0\x13\0\x0a\0\x33\0\x32\0\x2f\0\x07\0\x05\0\x04\0\x15\0\x12\0\x09\0\x14\0\x11\0\x08\0\x06\0\x03\x01\0\0\x04\0\x23\0\0$|s p/Metasploit meterpreter metsvc/ i/**BACKDOOR**/
 match meterpreter m|^\0\0\0\xd3\xca\xfe\xba\xbe\0\x03\0-\0\n\x07\0\x07\x07\0\x08\x01\0\x05start\x01\0E\(Ljava/io/DataInputStream;Ljava/io/OutputStream;\[Ljava/lang/String;\)V\x01\0\nExceptions\x07\0\t\x01\0\x17javapayload/stage/Stage\x01\0\x10java/lang/Object\x01\0\x13java/lang/Exception| p/Metasploit browser_autopwn/
 
@@ -4364,6 +4364,7 @@ match telnet m|^\xff\xfb\x01\xff\xfb\x03\r\n\r\nCopyright \(c\) 2004 - 2006 3Com
 match telnet m|^\xff\xfb\x01\xff\xfe\x01Connected\x1b\[K\r\n\x1b\[1;1HAironet (BR\w+) V([\d.]+) +\x1b| p/Aironet $1 telnetd/ v/$2/ d/WAP/ cpe:/h:cisco:aironet_$1/
 match telnet m|^\xff\xfd\x01\xff\xfd!\xff\xfb\x01\xff\xfb\x03USR ADSL Gateway\r\nLogin: | p/USRobotics ADSL router telnetd/ d/broadband router/
 match telnet m|^\xff\xfb\x03\xff\xfb\x01\r\nService Processor login: | p/HP-UX GSP processor telnetd/ o/HP-UX/ cpe:/o:hp:hp-ux/a
+match telnet m|^\xff\xfb\x01\xff\xfb\x03\xff\xfb\0\xff\xfd\0\xff\xfd\x1f\r\n(FGT\d+[A-Z]*) - FortiOS (v[\d\.]+) [A-Z0-9]+.*User Access Verification\r\n\r\nUsername: |s p/$1/ d/router/ o/FortiOS/ v/$2/ cpe:/a:fortinet:fortios/
 match telnet m|^\xff\xfb\x01\xff\xfb\x03\xff\xfb\0\xff\xfd\0\xff\xfd\x1f\r\n.*User Access Verification\r\n\r\nUsername: |s p/Cisco telnetd/ d/router/ o/IOS/ cpe:/a:cisco:telnet/ cpe:/o:cisco:ios/a
 match telnet m|^CCProxy Telnet>CCProxy Telnet Service Ready\.\r\nCCProxy Telnet>| p/CCProxy telnet configuration/ o/Windows/ cpe:/o:microsoft:windows/a
 match telnet m|^\xff\xfd\x01\xff\xfd!\xff\xfb\x01\xff\xfb\x03ADSL2\+ Wireless Router (\w+) \r\nSoftware Version: ([\w.]+)\r\nLogin name: | p/BT ADSL2+ $1 wireless router telnetd/ v/$2/ d/WAP/

@@ -1,6 +1,8 @@
 package probe
 
 import (
+	"github.com/dlclark/regexp2"
+	"github.com/stretchr/testify/assert"
 	"testing"
 )
 
@@ -28,7 +30,7 @@ sslports 443,8443
 totalwaitms 5000
 tcpwrappedms 3000
 rarity 1
-match http m|^HTTP/1\.[01] \d\d\d| p/Apache httpd/ v/2.4.6/ i/CentOS/
+match http m|^HTTP/1\.[01]| p/Apache httpd/ v/2.4.6/ i/CentOS/
 softmatch http m|^<HTML|
 softmatch http m|^<html|
 
@@ -54,7 +56,7 @@ match tls m|^\x16\x03[\x00-\x03]..\x02|
 		t.Errorf("Expected probe name 'GetRequest', got '%s'", probes[0].Name)
 	}
 
-	if probes[0].Protocol != "tcp" {
+	if probes[0].Protocol != "TCP" {
 		t.Errorf("Expected protocol 'TCP', got '%s'", probes[0].Protocol)
 	}
 
@@ -88,8 +90,8 @@ match tls m|^\x16\x03[\x00-\x03]..\x02|
 		t.Errorf("Expected service 'http', got '%s'", probes[0].MatchGroup[0].Service)
 	}
 
-	if probes[0].MatchGroup[0].Pattern != "m|^HTTP/1\\.[01]" {
-		t.Errorf("Expected pattern 'm|^HTTP/1\\.[01]', got '%s'", probes[0].MatchGroup[0].Pattern)
+	if probes[0].MatchGroup[0].Pattern != "^HTTP/1\\.[01]" {
+		t.Errorf("Expected pattern '^HTTP/1\\.[01]', got '%s'", probes[0].MatchGroup[0].Pattern)
 	}
 
 	if probes[0].MatchGroup[0].VersionInfo.ProductName != "Apache" {
@@ -116,4 +118,52 @@ match tls m|^\x16\x03[\x00-\x03]..\x02|
 	if probes[0].MatchGroup[1].Pattern != "^<HTML" {
 		t.Errorf("Expected pattern '^<HTML', got '%s'", probes[0].MatchGroup[1].Pattern)
 	}
+}
+
+func TestProbe_Match(t *testing.T) {
+	data := []byte("\xff\xfb\x01\xff\xfb\x03\xff\xfb\x00\xff\xfd\x00\xff\xfd\x1f\r\nFGT101E - FortiOS v6.4.8 FN1EDGE003\r\nUser Access Verification\r\n\r\nUsername: ")
+	manage, _ := GetManager(&FingerprintOptions{VersionIntensity: 8})
+	err := manage.Load()
+	assert.Nil(t, err)
+	var r *Match
+	for _, p := range manage.GetTCPProbes() {
+		r, _ = p.Match(data)
+		if r == nil {
+			continue
+		}
+		break
+	}
+	assert.NotNil(t, r)
+	if r != nil {
+		assert.Equal(t, r.Service, "telnet")
+	}
+
+}
+
+func TestMatch(t *testing.T) {
+	data := []byte("\xff\xfb\x01\xff\xfb\x03\xff\xfb\x00\xff\xfd\x00\xff\xfd\x1f\r\nFGT101E - FortiOS v6.4.8 FN1EDGE003\r\nUser Access Verification\r\n\r\nUsername: ")
+	pat := []byte("^\xff\xfb\x01\xff\xfb\x03\xff\xfb\x00\xff\xfd\x00\xff\xfd\x1f\r\n.*User Access Verification\r\n\r\nUsername: ")
+	com, err := regexp2.Compile(string(pat), regexp2.Singleline)
+	assert.Nil(t, err)
+	ok, s := com.MatchString(string(data))
+	assert.True(t, ok)
+	assert.Nil(t, s)
+}
+
+func TestFixPattern(t *testing.T) {
+	s1 := "\\xff\\xfb\\x01\\xff\\xfb\\x03\\xff\\xfb\\0\\xff\\xfd\\0\\xff\\xfd\\x1f\\r\\n"
+	s2 := "\xff\xfb\x01\xff\xfb\x03\xff\xfb\x00\xff\xfd\x00\xff\xfd\x1f\r\n"
+	assert.Equal(t, s2, FixPattern(s1))
+}
+
+func TestMatch2(t *testing.T) {
+	pat := []byte("^\\+-{26}\\+\\r\\n\\x7c {6}Welcome to use {6}\\x7c\\r\\n\\x7c >Destiny DPS Mini shell< \\x7c\\r\\n\\+-{9}\\+-{16}\\+\\r\\n\\x7c Author  \\x7c TimesWu {8}\\x7c\\r\\n\\+-{9}\\+-{16}\\+\\r\\n\\x7c Version \\x7c V([\\d.]+) {10}\\x7c\\r\\n\\+-{9}\\+-{16}\\+\\r\\n")
+	response := []byte("^\xff\xfb\x01\xff\xfb\x03\xff\xfb\x00\xff\xfd\x00\xff\xfd\x1f\r\n.*User Access Verification\r\n\r\nUsername: ")
+	s2 := FixPattern(string(pat))
+	com, err := regexp2.Compile(s2, regexp2.Singleline)
+	assert.Nil(t, err)
+	ok, s := com.MatchString(string(response))
+	assert.Nil(t, s)
+	assert.False(t, ok)
+
 }

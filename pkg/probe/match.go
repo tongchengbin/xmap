@@ -21,10 +21,7 @@ type VersionInfo struct {
 	DeviceType string
 }
 
-
-
-func getPatternRegexp(pattern string, opt string) *regexp2.Regexp {
-	pattern = strings.ReplaceAll(pattern, `\0`, `\x00`)
+func getPatternRegexp(pattern string, opt string) (*regexp2.Regexp, error) {
 	var o regexp2.RegexOptions
 	switch opt {
 	case "i":
@@ -34,7 +31,7 @@ func getPatternRegexp(pattern string, opt string) *regexp2.Regexp {
 	default:
 		o = regexp2.None
 	}
-	return regexp2.MustCompile(pattern, o)
+	return regexp2.Compile(pattern, o)
 }
 
 func FixProtocol(oldProtocol string) string {

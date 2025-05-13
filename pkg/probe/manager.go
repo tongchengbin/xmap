@@ -4,7 +4,6 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"sync"
 	"time"
@@ -262,7 +261,7 @@ func (fm *Manager) GetProbesByVersionIntensity(intensity int) ([]*Probe, []*Prob
 
 // Load 从文件加载探针数据
 func (s *FileProbeSource) Load() (string, error) {
-	data, err := ioutil.ReadFile(s.FilePath)
+	data, err := os.ReadFile(s.FilePath)
 	if err != nil {
 		return "", err
 	}

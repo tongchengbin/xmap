@@ -3,7 +3,9 @@ package output
 import (
 	"bufio"
 	"fmt"
+	"github.com/logrusorgru/aurora"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/projectdiscovery/gologger"
@@ -58,39 +60,28 @@ func (o *ConsoleOuter) Output(results *types.ScanResult) error {
 	}
 
 	// 格式化组件信息
-	componentsStr := ""
-	for i, component := range results.Components {
-		if i > 0 {
-			componentsStr += ", "
-		}
+	var componentsList []string
+	for _, component := range results.Components {
 		name, hasName := component["name"]
-		version, hasVersion := component["version"]
-
-		if hasName {
-			componentsStr += fmt.Sprintf("%v", name)
-			if hasVersion {
-				componentsStr += fmt.Sprintf(" %v", version)
+		if !hasName {
+			continue
+		}
+		si := fmt.Sprintf("%v", name)
+		for k, v := range component {
+			if k != "name" {
+				si += fmt.Sprintf(" %v=%v", k, v)
 			}
 		}
+		componentsList = append(componentsList, aurora.Cyan(si).String())
 	}
-
+	componentsStr := strings.Join(componentsList, "|")
 	// 构建目标URL
 	targetURL := fmt.Sprintf("%s://%s:%d", results.Service, results.Target.Host, results.Target.Port)
-
-	// 根据服务类型选择不同的颜色
-	serviceColor := "\x1b[32m" // 默认绿色
-	if results.Service == "https" || results.Service == "ssl" {
-		serviceColor = "\x1b[36m" // https/ssl使用青色
-	} else if results.Service == "http" {
-		serviceColor = "\x1b[33m" // http使用黄色
-	}
-
 	// 格式化的结果字符串
-	outputStr := fmt.Sprintf("[%s] %s\x1b[0m [\x1b[36m%s\x1b[0m] [\x1b[31m%.2fs\x1b[0m]\n",
-		serviceColor+results.Service,
-		targetURL,
+	outputStr := fmt.Sprintf("[%s] %s [%s]\n",
+		aurora.Green(targetURL),
 		componentsStr,
-		results.Duration)
+		aurora.Red(fmt.Sprintf("%.2fs", results.Duration)).String())
 
 	// 如果有输出文件，写入文件
 	if o.file != nil && o.writer != nil {

@@ -23,12 +23,12 @@ func main() {
 
 	// 更新指纹规则库
 	if options.UpdateAppFingerRule {
-		runner, err := runner.New(options)
+		run, err := runner.New(options)
 		if err != nil {
 			gologger.Fatal().Msgf("创建runner失败: %v", err)
 		}
-		
-		err = runner.UpdateRules()
+
+		err = run.UpdateRules()
 		if err != nil {
 			gologger.Fatal().Msgf("更新指纹规则库失败: %v", err)
 		}
@@ -36,13 +36,13 @@ func main() {
 	}
 
 	// 创建runner
-	runner, err := runner.New(options)
+	run, err := runner.New(options)
 	if err != nil {
 		gologger.Fatal().Msgf("创建runner失败: %v", err)
 	}
 
 	// 执行扫描
-	err = runner.Run()
+	err = run.Run()
 	if err != nil {
 		gologger.Fatal().Msgf("%v", err)
 	}
