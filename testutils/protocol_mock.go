@@ -1,4 +1,4 @@
-package test
+package testutils
 
 import (
 	"context"
@@ -325,7 +325,7 @@ func (s *TestServer) serveTCP() {
 							// 处理后续请求
 							if n > 0 {
 								request = buffer[:n]
-								fmt.Printf("收到后续请求 (%d 字节): %s\n", len(request), formatRequest(request))
+								fmt.Printf("收到后续请求 (%d 字节): %s\n", len(request), FormatBytes(request))
 
 								// 匹配规则
 								matched = false
@@ -333,7 +333,7 @@ func (s *TestServer) serveTCP() {
 									if rule.Matcher.Match(request) {
 										response = rule.Handler.Handle(request)
 										matched = true
-										fmt.Printf("匹配后续规则，将发送响应 (%d 字节): %s\n", len(response), formatRequest(response))
+										fmt.Printf("匹配后续规则，将发送响应 (%d 字节): %s\n", len(response), FormatBytes(response))
 										break
 									}
 								}
@@ -429,32 +429,4 @@ func (s *TestServer) GetProbeData() []byte {
 	s.probeMutex.Lock()
 	defer s.probeMutex.Unlock()
 	return s.probeData
-}
-
-// formatRequest 格式化请求/响应内容，用于调试输出
-func formatRequest(data []byte) string {
-	if len(data) == 0 {
-		return "<empty>"
-	}
-
-	// 检查是否是可打印字符
-	isPrintable := true
-	for _, b := range data {
-		if b < 32 && b != '\n' && b != '\r' && b != '\t' {
-			isPrintable = false
-			break
-		}
-	}
-
-	if isPrintable {
-		// 对于可打印字符，直接返回字符串
-		return string(data)
-	} else {
-		// 对于二进制数据，返回十六进制表示
-		if len(data) > 32 {
-			// 如果数据太长，只显示前32字节
-			return fmt.Sprintf("%x... (%d more bytes)", data[:32], len(data)-32)
-		}
-		return fmt.Sprintf("%x", data)
-	}
 }

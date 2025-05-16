@@ -77,12 +77,14 @@ func (o *ConsoleOuter) Output(results *types.ScanResult) error {
 	componentsStr := strings.Join(componentsList, "|")
 	// 构建目标URL
 	targetURL := fmt.Sprintf("%s://%s:%d", results.Service, results.Target.Host, results.Target.Port)
-	// 格式化的结果字符串
-	outputStr := fmt.Sprintf("[%s] %s [%s]\n",
-		aurora.Green(targetURL),
-		componentsStr,
-		aurora.Red(fmt.Sprintf("%.2fs", results.Duration)).String())
+	outputFields := []string{fmt.Sprintf("[%s]", aurora.Green(targetURL)),
 
+		componentsStr}
+	if title, ok := results.Banner["title"]; ok {
+		outputFields = append(outputFields, fmt.Sprintf("[%s]", aurora.Green(title)))
+	}
+	outputFields = append(outputFields, fmt.Sprintf("[%s]", aurora.Green(results.Duration).String()))
+	outputStr := strings.Join(outputFields, " ")
 	// 如果有输出文件，写入文件
 	if o.file != nil && o.writer != nil {
 		o.mutex.Lock()

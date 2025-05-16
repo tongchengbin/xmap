@@ -3,6 +3,7 @@ package types
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"strconv"
 	"strings"
 	"time"
@@ -57,7 +58,6 @@ func NewTarget(raw string) *ScanTarget {
 	if parts := strings.Split(raw, "://"); len(parts) > 1 {
 		scheme := strings.ToLower(parts[0])
 		host := parts[1]
-
 		// 处理协议
 		switch scheme {
 		case "http", "https":
@@ -100,7 +100,8 @@ func NewTarget(raw string) *ScanTarget {
 	} else {
 		// 没有协议前缀，检查是否有端口
 		if hostPort := strings.Split(raw, ":"); len(hostPort) > 1 {
-			target.Host = hostPort[0]
+			sep := hostPort[0]
+			target.Host = sep
 			port, err := strconv.Atoi(hostPort[1])
 			if err == nil && port > 0 && port < 65536 {
 				target.Port = port
@@ -114,10 +115,12 @@ func NewTarget(raw string) *ScanTarget {
 			target.Port = 80
 		}
 	}
-
+	// 如果host 是IP，设置IP
+	if ip := net.ParseIP(target.Host); ip != nil {
+		target.IP = ip.String()
+	}
 	// 标记为已解析
 	target.Parsed = true
-
 	return target
 }
 

@@ -2,9 +2,9 @@ package types
 
 import (
 	"errors"
+	"github.com/projectdiscovery/gologger"
 	"io"
 	"strings"
-	"github.com/projectdiscovery/gologger"
 )
 
 // ParseNetworkError 解析网络错误并返回特定的错误类型
@@ -47,13 +47,13 @@ type PortStatus int
 type ErrorType string
 
 const (
-	ErrNil                   ErrorType = "nil"
-	ErrorTypeReadTimeout     ErrorType = "read_timeout"
-	ErrorTypeWriteTimeout    ErrorType = "write_timeout"
-	ErrorTypeConnectionTimeout ErrorType = "connection_timeout"
+	ErrNil                      ErrorType = "nil"
+	ErrorTypeReadTimeout        ErrorType = "read_timeout"
+	ErrorTypeWriteTimeout       ErrorType = "write_timeout"
+	ErrorTypeConnectionTimeout  ErrorType = "connection_timeout"
 	ErrorTypeNetworkUnreachable ErrorType = "network_unreachable"
-	ErrorTypeHostUnreachable ErrorType = "host_unreachable"
-	ErrorEOF                 ErrorType = "eof"
+	ErrorTypeHostUnreachable    ErrorType = "host_unreachable"
+	ErrorEOF                    ErrorType = "eof"
 )
 
 func (p *PortStatusCheck) SetOpen() {

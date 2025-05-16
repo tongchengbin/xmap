@@ -9,40 +9,29 @@ import (
 )
 
 func main() {
-	// 解析命令行选项
+	// 创建 runner
 	options, err := runner.ParseOptions()
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-
-	// 显示banner
-	if !options.Silent {
-		fmt.Print(options.Banner)
+	xmapRunner, err := runner.New(options)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
 	}
-
+	// 显示 banner
+	xmapRunner.ShowBanner()
 	// 更新指纹规则库
-	if options.UpdateAppFingerRule {
-		run, err := runner.New(options)
-		if err != nil {
-			gologger.Fatal().Msgf("创建runner失败: %v", err)
-		}
-
-		err = run.UpdateRules()
+	if options.UpdateRule {
+		err = xmapRunner.UpdateRules()
 		if err != nil {
 			gologger.Fatal().Msgf("更新指纹规则库失败: %v", err)
 		}
 		return
 	}
-
-	// 创建runner
-	run, err := runner.New(options)
-	if err != nil {
-		gologger.Fatal().Msgf("创建runner失败: %v", err)
-	}
-
 	// 执行扫描
-	err = run.Run()
+	err = xmapRunner.RunEnumeration()
 	if err != nil {
 		gologger.Fatal().Msgf("%v", err)
 	}
