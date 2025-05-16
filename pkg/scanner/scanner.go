@@ -20,24 +20,17 @@ import (
 
 // ServiceScanner 默认扫描器实现
 type ServiceScanner struct {
-	// 默认选项
-	defaultOptions *ScanOptions
 	// 版本强度
 	probeManager *probe.Manager
-	// fastdialer实例
-	dialer *fastdialer.Dialer
+	dialer       *fastdialer.Dialer
+	options      *ScanOptions
 }
 
 // NewServiceScanner 创建新的扫描器
-func NewServiceScanner(options ...ScanOption) (*ServiceScanner, error) {
+func NewServiceScanner(options *ScanOptions) (*ServiceScanner, error) {
 	// 创建默认选项
-	defaultOptions := DefaultScanOptions()
-	// 应用选项
-	for _, option := range options {
-		option(defaultOptions)
-	}
 	probeManager, err := probe.GetManager(&probe.FingerprintOptions{
-		VersionIntensity: defaultOptions.VersionIntensity,
+		VersionIntensity: options.VersionIntensity,
 	})
 	if err != nil {
 		gologger.Error().Msgf("获取指纹管理器失败: %v", err)
@@ -50,10 +43,9 @@ func NewServiceScanner(options ...ScanOption) (*ServiceScanner, error) {
 	// 使用内存缓存
 	fdOptions.CacheType = fastdialer.Memory
 	fdOptions.CacheMemoryMaxItems = 1000
-	if defaultOptions.Proxy != "" {
+	if options.Proxy != nil {
 		// 使用代理
-		proxyURL, err := url.Parse(defaultOptions.Proxy)
-		dialer, err := proxy.FromURL(proxyURL, proxy.Direct)
+		dialer, err := proxy.FromURL(options.Proxy, proxy.Direct)
 		if err != nil {
 			gologger.Error().Msgf("创建fastdialer失败: %v", err)
 			return nil, err
@@ -67,27 +59,25 @@ func NewServiceScanner(options ...ScanOption) (*ServiceScanner, error) {
 	}
 	// 创建扫描器
 	scanner := &ServiceScanner{
-		defaultOptions: defaultOptions,
-		probeManager:   probeManager,
-		dialer:         fd,
+		options:      options,
+		probeManager: probeManager,
+		dialer:       fd,
 	}
 	return scanner, nil
 }
 
 // Scan 扫描单个目标
-func (s *ServiceScanner) Scan(target *types.ScanTarget, options ...ScanOption) (*types.ScanResult, error) {
-	return s.ScanWithContext(context.Background(), target, options...)
+func (s *ServiceScanner) Scan(target *types.ScanTarget, options *ScanOptions) (*types.ScanResult, error) {
+	return s.ScanWithContext(context.Background(), target, options)
 }
 
 // BatchScan 批量扫描多个目标
-func (s *ServiceScanner) BatchScan(targets []*types.ScanTarget, options ...ScanOption) ([]*types.ScanResult, error) {
-	return s.BatchScanWithContext(context.Background(), targets, options...)
+func (s *ServiceScanner) BatchScan(targets []*types.ScanTarget, options ScanOptions) ([]*types.ScanResult, error) {
+	return s.BatchScanWithContext(context.Background(), targets, options)
 }
 
 // ScanWithContext 带上下文的扫描
-func (s *ServiceScanner) ScanWithContext(ctx context.Context, target *types.ScanTarget, options ...ScanOption) (*types.ScanResult, error) {
-	// 创建扫描选项
-	scanOptions := s.createScanOptions(options)
+func (s *ServiceScanner) ScanWithContext(ctx context.Context, target *types.ScanTarget, options *ScanOptions) (*types.ScanResult, error) {
 	// 创建扫描结果
 	result := types.NewScanResult(target)
 	// 选择适用的探针
@@ -103,20 +93,20 @@ func (s *ServiceScanner) ScanWithContext(ctx context.Context, target *types.Scan
 		result.Complete(err)
 		return result, err
 	}
-	gologger.Debug().Msgf("scanning %s with config: %v", target.String(), scanOptions)
-	if scanOptions.MaxTimeout > 0 {
+	gologger.Debug().Msgf("scanning %s with config: %v", target.String(), options)
+	if options.MaxTimeout > 0 {
 		// ctx 包裹
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, scanOptions.MaxTimeout)
+		ctx, cancel = context.WithTimeout(ctx, options.MaxTimeout)
 		defer cancel()
 	}
 	// 对探针进行排序，优先使用适合当前端口的探针
 	probes = sortProbes(probes, target.Port, false)
 	// 执行扫描
-	err := s.executeProbes(ctx, target, probes, false, result, scanOptions)
+	err := s.executeProbes(ctx, target, probes, false, result, options)
 	if result.Service == "ssl" {
 		probes = sortProbes(probes, target.Port, true)
-		err = s.executeProbes(ctx, target, probes, true, result, scanOptions)
+		err = s.executeProbes(ctx, target, probes, true, result, options)
 	}
 	result.Complete(err)
 	return result, err
@@ -173,20 +163,6 @@ func (s *ServiceScanner) BatchScanWithContext(ctx context.Context, targets []*ty
 	wg.Wait()
 
 	return results, nil
-}
-
-// createScanOptions 创建扫描选项
-func (s *ServiceScanner) createScanOptions(options []ScanOption) *ScanOptions {
-	// 复制默认选项
-	scanOptions := &ScanOptions{}
-	*scanOptions = *s.defaultOptions
-
-	// 应用选项
-	for _, option := range options {
-		option(scanOptions)
-	}
-
-	return scanOptions
 }
 
 // executeProbes 执行探针扫描

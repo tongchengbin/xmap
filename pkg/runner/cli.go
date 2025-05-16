@@ -2,6 +2,7 @@ package runner
 
 import (
 	"fmt"
+	"github.com/tongchengbin/xmap/pkg/types"
 	"os"
 
 	"github.com/projectdiscovery/goflags"
@@ -21,13 +22,11 @@ __  ____  ___
 `, Version)
 
 // ParseOptions 解析命令行选项
-func ParseOptions() (*Options, error) {
-	options := &Options{}
-
+func ParseOptions() (*types.Options, error) {
+	options := types.DefaultOptions()
 	// 设置版本和banner
 	options.Version = Version
 	options.Banner = Banner
-
 	flagSet := goflags.NewFlagSet()
 	flagSet.SetDescription("XMap - 一个快速可靠的网络扫描和指纹识别工具")
 
@@ -42,7 +41,7 @@ func ParseOptions() (*Options, error) {
 	flagSet.CreateGroup("扫描", "扫描选项",
 		flagSet.IntVar(&options.Timeout, "timeout", 5, "扫描超时时间(秒)"),
 		flagSet.IntVarP(&options.Retries, "retries", "r", 2, "扫描重试次数"),
-		flagSet.IntVarP(&options.Workers, "workers", "c", 100, "最大并行扫描数"),
+		flagSet.IntVarP(&options.Threads, "workers", "c", 100, "最大并行扫描数"),
 		flagSet.BoolVarP(&options.FastMode, "fast", "f", false, "使用快速模式"),
 		flagSet.BoolVar(&options.UseAllProbes, "all-probes", false, "使用所有探针"),
 		flagSet.StringSliceVarP(&options.NmapProneName, "probes", "np", goflags.StringSlice{}, "要使用的探针名称，逗号分隔", goflags.Options{}),

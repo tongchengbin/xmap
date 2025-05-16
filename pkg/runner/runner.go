@@ -3,30 +3,29 @@ package runner
 import (
 	"context"
 	"fmt"
-	"os"
-	"os/signal"
-	"time"
-
 	"github.com/projectdiscovery/gologger"
 	"github.com/projectdiscovery/gologger/levels"
 	"github.com/tongchengbin/xmap/pkg/api"
 	"github.com/tongchengbin/xmap/pkg/output"
+	"github.com/tongchengbin/xmap/pkg/scanner"
 	"github.com/tongchengbin/xmap/pkg/types"
 	"github.com/tongchengbin/xmap/pkg/utils"
+	"net/url"
+	"os"
+	"os/signal"
 )
 
 // Runner 结构体包含扫描运行时所需的所有内容
 type Runner struct {
-	options *Options
+	options *types.Options
 	xmap    *api.XMap
 }
 
 // New 创建一个新的Runner实例
-func New(options *Options) (*Runner, error) {
+func New(options *types.Options) (*Runner, error) {
 	runner := &Runner{
 		options: options,
 	}
-
 	// 设置日志级别
 	if options.Silent {
 		gologger.DefaultLogger.SetMaxLevel(levels.LevelSilent)
@@ -37,15 +36,7 @@ func New(options *Options) (*Runner, error) {
 	}
 
 	// 创建XMap实例
-	xmapInstance := api.NewXMap(
-		api.WithTimeout(time.Duration(options.Timeout)*time.Second),
-		api.WithRetries(options.Retries),
-		api.WithVersionIntensity(options.VersionIntensity),
-		api.WithMaxParallelism(options.Workers),
-		api.WithFastMode(options.FastMode),
-		api.WithVerbose(options.Verbose),
-		api.WithDebugResponse(options.DebugResponse),
-	)
+	xmapInstance := api.NewXMap(options)
 
 	runner.xmap = xmapInstance
 	return runner, nil
@@ -130,23 +121,20 @@ func (r *Runner) Run() error {
 		probeNames = r.options.NmapProneName
 	}
 	// 创建扫描选项
-	scanOptions := &types.ScanOptions{
-		Timeout:          r.options.Timeout,
-		Retries:          r.options.Retries,
-		UseSSL:           r.options.UseSSL,
-		VersionIntensity: r.options.VersionIntensity,
-		MaxParallelism:   r.options.Workers,
-		FastMode:         r.options.FastMode,
-		UseAllProbes:     r.options.UseAllProbes,
-		ProbeNames:       probeNames,
-		ServiceDetection: true,
-		VersionDetection: r.options.ServiceVersion,
-		// Web扫描选项
-		Proxy:         r.options.Proxy,
-		DisableIcon:   r.options.DisableIcon,
-		DisableJS:     r.options.DisableJS,
-		DebugResponse: r.options.DebugResponse,
+	scanOptions := scanner.DefaultScanOptions()
+
+	// 设置扫描选项
+	scanOptions.ProbeNames = probeNames
+
+	// 设置扫描选项
+	if r.options.Proxy != "" {
+		var err error
+		scanOptions.Proxy, err = url.Parse(r.options.Proxy)
+		if err != nil {
+			return err
+		}
 	}
+	scanOptions.MaxParallelism = r.options.Threads
 
 	// 创建上下文
 	ctx, cancel := context.WithCancel(context.Background())
