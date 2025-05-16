@@ -3800,6 +3800,8 @@ match ssh m|^SSH-([\d.]+)-Go\r\n| p|Golang x/crypto/ssh server| i/protocol $1/ c
 match ssh m|^SSH-([\d.]+)-SSH Server - Banana Studio\r\n| p/Banana Studio SSH server app (net.xnano.android.sshserver.tv)/ i/protocol $1/ o/Android/ cpe:/o:google:android/a cpe:/o:linux:linux_kernel/a
 match ssh m|^SSH-2\.0-PBPS-SM-1\.0\.0\r\n| p/BeyondTrust Password Safe session manager/ i/protocol 2.0/ cpe:/a:beyondtrust:password_safe/
 
+# Erlang
+match ssh m|^SSH-2.0-Erlang/([\d\.]+)\r\n| p/Erlang-OPT v/$1
 # FortiSSH uses random server name - match an appropriate length, then check for 3 dissimilar character classes in a row.
 # Does not catch everything, but ought to be pretty good.
 match ssh m%^SSH-([\d.]+)-(?=[\w._-]{5,15}\r?\n$).*(?:[a-z](?:[A-Z]\d|\d[A-Z])|[A-Z](?:[a-z]\d|\d[a-z])|\d(?:[a-z][A-Z]|[A-Z][a-z]))% p/FortiSSH/ i/protocol $1/ cpe:/o:fortinet:fortios/
