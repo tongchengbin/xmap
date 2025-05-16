@@ -165,5 +165,10 @@ func TestMatch2(t *testing.T) {
 	ok, s := com.MatchString(string(response))
 	assert.Nil(t, s)
 	assert.False(t, ok)
+}
+func TestProbe(t *testing.T) {
+	pattern := "^.\\x10\\0\\0\\0\\0\\0\\0.\\0\\0\\0\\n\\0\\\\Invalid or unsupported protocol version \\(71\\); supported versions are \\((\\d+[^)]+)\\)"
+	pattern = FixPattern(pattern)
+	regexp2.Compile(pattern, regexp2.Singleline)
 
 }

@@ -30,7 +30,6 @@ func NewProgress(name string, total int) *Progress {
 func (p *Progress) Start() {
 	ticker := time.NewTicker(5 * time.Second) // 每秒更新一次，与Nuclei类似
 	defer ticker.Stop()
-
 	for {
 		select {
 		case <-ticker.C:

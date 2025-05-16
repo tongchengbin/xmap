@@ -3,51 +3,42 @@ package web
 import (
 	"context"
 	"fmt"
-	"github.com/tongchengbin/appfinger/pkg/runner"
-	"time"
-
 	"github.com/tongchengbin/appfinger/pkg/crawl"
 	"github.com/tongchengbin/appfinger/pkg/rule"
+	"github.com/tongchengbin/appfinger/pkg/runner"
+	"github.com/tongchengbin/xmap/pkg/types"
 )
 
 // Scanner Web应用指纹扫描器
 type Scanner struct {
-	options *crawl.Options
+	options *types.Options
+	// 创建爬虫
+	crawler *crawl.Crawler
 }
 
 // NewScanner 创建新的Web扫描器
-func NewScanner() (*Scanner, error) {
+func NewScanner(options *types.Options) (*Scanner, error) {
 	// 获取规则管理器实例
 	ruleManager := rule.GetRuleManager()
 	if !ruleManager.IsLoaded() {
 		return nil, fmt.Errorf("规则库未加载")
 	}
-	// 创建默认选项
-	options := crawl.DefaultOption()
-
-	return &Scanner{
+	crawlerOptions := crawl.DefaultOption()
+	crawlerOptions.Proxy = options.Proxy
+	crawlerOptions.DebugResp = options.DebugResponse
+	crawlerOptions.DisableIcon = options.DisableIcon
+	crawler := crawl.NewCrawler(crawlerOptions)
+	scanner := &Scanner{
 		options: options,
-	}, nil
+		crawler: crawler,
+	}
+	// 创建默认选项
+	return scanner, nil
 }
 
 // ReloadRules 重新加载指纹库规则
 func ReloadRules() error {
 	return rule.GetRuleManager().ReloadRules()
-}
-
-// SetTimeout 设置超时时间
-func (s *Scanner) SetTimeout(timeout time.Duration) {
-	s.options.Timeout = timeout
-}
-
-// SetDebugResponse 设置是否调试响应
-func (s *Scanner) SetDebugResponse(debug bool) {
-	s.options.DebugResp = debug
-}
-
-// SetProxy 设置代理
-func (s *Scanner) SetProxy(proxy string) {
-	s.options.Proxy = proxy
 }
 
 // ScanResult Web扫描结果
@@ -72,9 +63,8 @@ func (s *Scanner) ScanWithContext(ctx context.Context, url string) (*ScanResult,
 	if finger == nil {
 		return nil, fmt.Errorf("指纹库未加载")
 	}
-	// 创建爬虫
-	crawler := crawl.NewCrawler(s.options)
-	sdk, err := runner.NewRunner(crawler, rule.GetRuleManager(), nil)
+
+	sdk, err := runner.NewRunner(s.crawler, rule.GetRuleManager(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("create Runner Error~")
 	}

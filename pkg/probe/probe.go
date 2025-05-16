@@ -113,10 +113,10 @@ func (p *Probe) Match(response []byte) (*Match, map[string]interface{}) {
 				// 如果不是字符串，继续下一个
 				continue
 			}
-			
+
 			if strings.Contains(vStr, "$") {
 				// 提取所有的$N引用
-				varPattern := regexp.MustCompile(`\$(\d+|[a-zA-Z][a-zA-Z0-9_]*)`) 
+				varPattern := regexp.MustCompile(`\$(\d+|[a-zA-Z][a-zA-Z0-9_]*)`)
 				// 替换所有的$N引用为相应的组值
 				replacedValue := varPattern.ReplaceAllStringFunc(vStr, func(match string) string {
 					groupKey := match[1:] // 去掉$前缀
@@ -138,7 +138,6 @@ func (p *Probe) Match(response []byte) (*Match, map[string]interface{}) {
 				extra[k] = replacedValue
 			}
 		}
-		fmt.Printf("%v\n", extra)
 		return m, extra
 	}
 	return nil, nil
@@ -217,7 +216,7 @@ func LoadProbes(s string, versionIntensity int) []*Probe {
 			pb.Fallback = parseStringList(line[9:])
 		}
 		if err != nil {
-			gologger.Debug().Msgf("parser probe line error: %v", err)
+			gologger.Debug().Msgf("parser probe line %d error: %v", lineIndex, err)
 		}
 		lineIndex++
 	}
@@ -290,12 +289,12 @@ func parseMatch(p *Probe, line string, soft bool, lineIndex int) error {
 	s = s[mStart+end+len(patternOpt):]
 	match.Soft = soft
 	match.Service = FixProtocol(match.Service)
-	pattern = FixPattern(pattern)
-	match.Pattern = pattern
+	fixPattern := FixPattern(pattern)
+	match.Pattern = fixPattern
 	var err error
-	match.regex, err = getPatternRegexp(pattern, patternOpt)
+	match.regex, err = getPatternRegexp(fixPattern, patternOpt)
 	if err != nil {
-		return err
+		return errors.New("regex compile error: " + pattern + " " + err.Error())
 	}
 	// 解析版本信息
 	if len(s) > 1 {
