@@ -130,3 +130,11 @@ func CreateProviderFromOptions(options *types.Options) (Provider, error) {
 
 	return NewMultiInputProvider(providers...), nil
 }
+
+func FromSliceString(targets []string) Provider {
+	input := &SimpleInputProvider{}
+	for _, target := range targets {
+		input.inputs = append(input.inputs, types.NewTarget(target))
+	}
+	return input
+}
