@@ -97,64 +97,6 @@ func (x *XMap) Scan(ctx context.Context, target *types.ScanTarget) (*types.ScanR
 	return result, nil
 }
 
-// ExecuteWithResultCallback 使用指定选项执行批量扫描，并实时回调每个扫描结果
-func (x *XMap) ExecuteWithResultCallback(
-	ctx context.Context,
-	targets []*types.ScanTarget,
-	options *scanner.ExecuteOptions,
-	resultCallback func(*types.ScanResult),
-) error {
-	if options == nil {
-		options = &scanner.ExecuteOptions{}
-	}
-	// 设置默认并行数
-	if options.MaxParallelism <= 0 {
-		options.MaxParallelism = 10
-	}
-	// 创建上下文，支持取消
-	scanCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	// 处理单个结果的函数
-	handleResult := func(result *types.ScanResult) {
-		// 如果提供了结果回调，则调用
-		if resultCallback != nil {
-			resultCallback(result)
-		}
-	}
-	// 启动扫描协程
-	wg := sizedwaitgroup.New(options.MaxParallelism)
-	for i, target := range targets {
-		wg.Add()
-		go func(i int, target *types.ScanTarget) {
-			defer func() {
-				wg.Done()
-			}()
-			// 检查上下文是否已取消
-			if scanCtx.Err() != nil {
-				result := &types.ScanResult{
-					Target: target,
-					Error:  scanCtx.Err(),
-				}
-				handleResult(result)
-				return
-			}
-			// 执行扫描
-			result, err := x.Scan(scanCtx, target)
-			if err != nil {
-				result = &types.ScanResult{
-					Target: target,
-					Error:  err,
-				}
-			}
-			// 处理结果
-			handleResult(result)
-		}(i, target)
-	}
-	// 等待所有扫描完成
-	wg.Wait()
-	return nil
-}
-
 // enrichResultWithWebData 使用Web扫描数据丰富扫描结果
 func (x *XMap) enrichResultWithWebData(result *types.ScanResult, webResult *web.ScanResult) {
 	if result == nil || webResult == nil {
@@ -324,7 +266,6 @@ func (x *XMap) ScanWithCallback(ctx context.Context, targets input.Provider, cal
 				})
 				return
 			}
-
 			// 调用回调函数
 			if callback != nil {
 				callback(result)
