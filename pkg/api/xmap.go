@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"github.com/remeh/sizedwaitgroup"
 	"strconv"
 	"strings"
 	"sync"
@@ -76,6 +77,7 @@ func (x *XMap) init() {
 			scanner.WithFastMode(x.defaultOptions.FastMode),
 			scanner.WithDebugRequest(x.defaultOptions.DebugRequest),
 			scanner.WithDebugResponse(x.defaultOptions.DebugResponse),
+			scanner.WithProxy(x.defaultOptions.Proxy),
 		)
 		if err != nil {
 			gologger.Error().Msgf("创建服务扫描器失败: %v", err)
@@ -230,10 +232,6 @@ func (x *XMap) ExecuteWithResultCallback(
 	// 创建上下文，支持取消
 	scanCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	// 创建信号量，控制并行度
-	sem := make(chan struct{}, options.MaxParallelism)
-	// 创建等待组
-	var wg sync.WaitGroup
 	// 处理单个结果的函数
 	handleResult := func(result *types.ScanResult) {
 		// 如果提供了结果回调，则调用
@@ -242,12 +240,11 @@ func (x *XMap) ExecuteWithResultCallback(
 		}
 	}
 	// 启动扫描协程
+	wg := sizedwaitgroup.New(options.MaxParallelism)
 	for i, target := range targets {
-		wg.Add(1)
-		sem <- struct{}{} // 获取信号量
+		wg.Add()
 		go func(i int, target *types.ScanTarget) {
 			defer func() {
-				<-sem // 释放信号量
 				wg.Done()
 			}()
 			// 检查上下文是否已取消
@@ -279,71 +276,56 @@ func (x *XMap) ExecuteWithResultCallback(
 // createScanOptions 创建扫描选项
 func (x *XMap) createScanOptions(options *types.ScanOptions) []scanner.ScanOption {
 	var scanOptions []scanner.ScanOption
-
 	if options == nil {
 		return scanOptions
 	}
-
 	// 设置超时
 	if options.Timeout > 0 {
 		scanOptions = append(scanOptions, scanner.WithTimeout(time.Duration(options.Timeout)*time.Second))
 	}
-
 	// 设置重试次数
 	if options.Retries > 0 {
 		scanOptions = append(scanOptions, scanner.WithRetries(options.Retries))
 	}
-
 	// 设置版本检测强度
 	if options.VersionIntensity >= 0 && options.VersionIntensity <= 9 {
 		scanOptions = append(scanOptions, scanner.WithVersionIntensity(options.VersionIntensity))
 	}
-
 	// 设置主机发现
 	scanOptions = append(scanOptions, scanner.WithHostDiscovery(options.HostDiscovery))
-
 	// 设置最大并行数
 	if options.MaxParallelism > 0 {
 		scanOptions = append(scanOptions, scanner.WithMaxParallelism(options.MaxParallelism))
 	}
-
 	// 设置探针名称
 	if len(options.ProbeNames) > 0 {
 		scanOptions = append(scanOptions, scanner.WithProbeNames(options.ProbeNames))
 	}
-
 	// 设置端口
 	if len(options.Ports) > 0 {
 		scanOptions = append(scanOptions, scanner.WithPorts(options.Ports))
 	}
-
+	if options.Proxy != "" {
+		scanOptions = append(scanOptions, scanner.WithProxy(options.Proxy))
+	}
 	// 设置是否使用所有探针
 	scanOptions = append(scanOptions, scanner.WithAllProbes(options.UseAllProbes))
-
 	// 设置是否使用快速模式
 	scanOptions = append(scanOptions, scanner.WithFastMode(options.FastMode))
-
 	// 设置是否使用服务检测
 	scanOptions = append(scanOptions, scanner.WithServiceDetection(options.ServiceDetection))
-
 	// 设置是否使用版本检测
 	scanOptions = append(scanOptions, scanner.WithVersionDetection(options.VersionDetection))
-
 	// 设置是否使用操作系统检测
 	scanOptions = append(scanOptions, scanner.WithOSDetection(options.OSDetection))
-
 	// 设置是否使用设备类型检测
 	scanOptions = append(scanOptions, scanner.WithDeviceTypeDetection(options.DeviceTypeDetection))
-
 	// 设置是否使用主机名检测
 	scanOptions = append(scanOptions, scanner.WithHostnameDetection(options.HostnameDetection))
-
 	// 设置是否使用产品名称检测
 	scanOptions = append(scanOptions, scanner.WithProductNameDetection(options.ProductNameDetection))
-
 	// 设置是否使用信息检测
 	scanOptions = append(scanOptions, scanner.WithInfoDetection(options.InfoDetection))
-
 	return scanOptions
 }
 

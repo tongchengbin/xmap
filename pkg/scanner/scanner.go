@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"golang.org/x/net/proxy"
 	"io"
 	"net"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -30,12 +32,10 @@ type ServiceScanner struct {
 func NewServiceScanner(options ...ScanOption) (*ServiceScanner, error) {
 	// 创建默认选项
 	defaultOptions := DefaultScanOptions()
-
 	// 应用选项
 	for _, option := range options {
 		option(defaultOptions)
 	}
-
 	probeManager, err := probe.GetManager(&probe.FingerprintOptions{
 		VersionIntensity: defaultOptions.VersionIntensity,
 	})
@@ -43,7 +43,6 @@ func NewServiceScanner(options ...ScanOption) (*ServiceScanner, error) {
 		gologger.Error().Msgf("获取指纹管理器失败: %v", err)
 		return nil, err
 	}
-
 	// 创建fastdialer实例
 	fdOptions := fastdialer.DefaultOptions
 	// 使用系统默认DNS
@@ -51,20 +50,27 @@ func NewServiceScanner(options ...ScanOption) (*ServiceScanner, error) {
 	// 使用内存缓存
 	fdOptions.CacheType = fastdialer.Memory
 	fdOptions.CacheMemoryMaxItems = 1000
-
+	if defaultOptions.Proxy != "" {
+		// 使用代理
+		proxyURL, err := url.Parse(defaultOptions.Proxy)
+		dialer, err := proxy.FromURL(proxyURL, proxy.Direct)
+		if err != nil {
+			gologger.Error().Msgf("创建fastdialer失败: %v", err)
+			return nil, err
+		}
+		fdOptions.ProxyDialer = &dialer
+	}
 	fd, err := fastdialer.NewDialer(fdOptions)
 	if err != nil {
 		gologger.Error().Msgf("创建fastdialer失败: %v", err)
 		return nil, err
 	}
-
 	// 创建扫描器
 	scanner := &ServiceScanner{
 		defaultOptions: defaultOptions,
 		probeManager:   probeManager,
 		dialer:         fd,
 	}
-
 	return scanner, nil
 }
 
@@ -205,7 +211,6 @@ func (s *ServiceScanner) executeUDPProbes(ctx context.Context, target *types.Sca
 		default:
 			// 继续处理
 		}
-
 		// 执行 UDP 探针
 		// UDP 不支持 SSL/TLS
 		response, _ := s.executeUDPProbe(ctx, target, pb, options)
@@ -344,11 +349,9 @@ func (s *ServiceScanner) executeUDPProbe(ctx context.Context, target *types.Scan
 	// 创建连接超时上下文
 	timeoutCtx, cancel := context.WithTimeout(ctx, options.Timeout)
 	defer cancel()
-
 	if options.DebugRequest {
 		gologger.Debug().Msgf("Sending UDP probe %s to %s", probe.Name, target.String())
 	}
-
 	// 创建 UDP 连接（UDP 不支持 SSL/TLS）
 	conn, err := s.createConnection(timeoutCtx, target, false, options.Timeout)
 	if err != nil {
@@ -406,11 +409,9 @@ func (s *ServiceScanner) executeUDPProbe(ctx context.Context, target *types.Scan
 func (s *ServiceScanner) createConnection(ctx context.Context, target *types.ScanTarget, useSSL bool, timeout time.Duration) (net.Conn, error) {
 	// 构建连接地址
 	address := fmt.Sprintf("%s:%d", target.Host, target.Port)
-
 	// 使用fastdialer处理连接
 	var conn net.Conn
 	var err error
-
 	// 根据协议类型创建不同类型的连接
 	var network string
 	switch target.Protocol {
@@ -419,11 +420,9 @@ func (s *ServiceScanner) createConnection(ctx context.Context, target *types.Sca
 	default:
 		network = "tcp" // 默认使用 TCP
 	}
-
 	// 设置超时上下文
 	dialCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-
 	// 检查是否需要 TLS 连接
 	if useSSL {
 		// 使用fastdialer的DialTLS方法进行TLS连接

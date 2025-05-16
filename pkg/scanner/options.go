@@ -46,6 +46,7 @@ type ScanOptions struct {
 	DebugResponse bool
 	// 是否打印详细的调试信息
 	Verbose bool
+	Proxy   string
 }
 
 // DefaultScanOptions 返回默认扫描选项
@@ -214,5 +215,12 @@ func WithDebugResponse(debugResponse bool) ScanOption {
 func WithVerbose(verbose bool) ScanOption {
 	return func(o *ScanOptions) {
 		o.Verbose = verbose
+	}
+}
+
+// WithProxy
+func WithProxy(proxy string) ScanOption {
+	return func(o *ScanOptions) {
+		o.Proxy = proxy
 	}
 }
