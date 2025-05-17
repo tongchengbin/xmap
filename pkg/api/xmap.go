@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"github.com/tongchengbin/appfinger/pkg/external/customrules"
 	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/remeh/sizedwaitgroup"
-	"github.com/tongchengbin/appfinger/pkg/external/customrules"
 	"github.com/tongchengbin/xmap/pkg/input"
 	"github.com/tongchengbin/xmap/pkg/scanner"
 
@@ -53,25 +53,18 @@ func New(options *types.Options) (*XMap, error) {
 func (x *XMap) init() error {
 	// 使用sync.Once确保只初始化一次
 	var initErr error
-	x.initOnce.Do(func() {
-		// 初始化默认指纹管理器
-		initErr = probe.InitDefaultManager()
-		if initErr != nil {
-			return
-		}
-		// 创建服务扫描器
-		x.serviceScanner, initErr = scanner.NewServiceScanner(x.options)
-		if initErr != nil {
-			return
-		}
-		// 初始化Web规则库
-		initErr = InitRuleManager(customrules.GetDefaultDirectory())
-		if initErr != nil {
-			return
-		}
-		// 创建Web扫描器
-		x.webScanner, initErr = web.NewScanner(x.options)
-	})
+	// 创建服务扫描器
+	x.serviceScanner, initErr = scanner.NewServiceScanner(x.options)
+	if initErr != nil {
+		return initErr
+	}
+	// 初始化Web规则库
+	initErr = InitRuleManager(customrules.GetDefaultDirectory())
+	if initErr != nil {
+		return initErr
+	}
+	// 创建Web扫描器
+	x.webScanner, initErr = web.NewScanner(x.options)
 
 	return initErr
 }
