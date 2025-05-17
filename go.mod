@@ -12,7 +12,7 @@ require (
 	github.com/projectdiscovery/gologger v1.1.46
 	github.com/remeh/sizedwaitgroup v1.0.0
 	github.com/stretchr/testify v1.10.0
-	github.com/tongchengbin/appfinger v1.6.0
+	github.com/tongchengbin/appfinger v1.6.2
 	golang.org/x/net v0.33.0
 )
 
@@ -52,6 +52,7 @@ require (
 	github.com/kevinburke/ssh_config v1.2.0 // indirect
 	github.com/klauspost/compress v1.17.4 // indirect
 	github.com/klauspost/pgzip v1.2.5 // indirect
+	github.com/logrusorgru/aurora/v4 v4.0.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mholt/archiver/v3 v3.5.1 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.27 // indirect

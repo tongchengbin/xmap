@@ -79,7 +79,7 @@ func (s *Scanner) ScanWithContext(ctx context.Context, url string) (*ScanResult,
 	// 返回结果
 	return &ScanResult{
 		URL:        url,
-		Components: result.Fingerprint,
+		Components: result.Components,
 		Banner:     result.Banner,
 	}, nil
 }
