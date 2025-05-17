@@ -61,7 +61,6 @@ func NewServiceScanner(options *types.Options) (*ServiceScanner, error) {
 		gologger.Error().Msgf("创建fastdialer失败: %v", err)
 		return nil, err
 	}
-	// 创建扫描器
 	scanner := &ServiceScanner{
 		options:      options,
 		probeManager: probeManager,
