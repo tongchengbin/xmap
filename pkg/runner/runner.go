@@ -26,13 +26,13 @@ type Runner struct {
 func New(options *types.Options) (*Runner, error) {
 	// 初始化日志
 	configureLogger(options)
-	
+
 	// 创建 XMap 实例
 	xmapInstance, err := api.New(options)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// 创建并返回 Runner 实例
 	return &Runner{
 		options: options,
@@ -75,16 +75,14 @@ func (r *Runner) RunEnumeration() error {
 	// 创建上下文
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	
+
 	// 处理中断信号
-	setupInterruptHandler(ctx, cancel)
-	
+	setupInterruptHandler(cancel)
 	// 创建输出处理器
 	outputHandler, err := setupOutputHandlers(r.options)
 	if err != nil {
 		return err
 	}
-	
 	// 创建进度跟踪器
 	var progressTracker *utils.Progress
 	if !r.options.Silent && !r.options.NoProgress {
@@ -92,13 +90,11 @@ func (r *Runner) RunEnumeration() error {
 		// progressTracker = utils.NewProgress()
 		// go progressTracker.Start()
 	}
-	
 	// 创建输入提供者
 	inputProvider, err := input.CreateProviderFromOptions(r.options)
 	if err != nil {
 		return fmt.Errorf("create input provider failed: %v", err)
 	}
-	
 	// 执行扫描
 	scanErr := r.xmap.ScanWithCallback(ctx, inputProvider,
 		// 结果回调 - 每当有一个结果就立即输出
@@ -107,12 +103,10 @@ func (r *Runner) RunEnumeration() error {
 			if progressTracker != nil {
 				progressTracker.Increment()
 			}
-			
 			// 处理输出
 			outputHandler.HandleResult(result)
 		},
 	)
-	
 	if scanErr != nil {
 		return fmt.Errorf("扫描失败: %v", scanErr)
 	}
@@ -120,12 +114,11 @@ func (r *Runner) RunEnumeration() error {
 }
 
 // setupInterruptHandler 设置中断信号处理
-func setupInterruptHandler(ctx context.Context, cancel context.CancelFunc) {
+func setupInterruptHandler(cancel context.CancelFunc) {
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, os.Interrupt)
 	go func() {
 		<-signalChan
-		gologger.Info().Msg("接收到中断信号，正在停止扫描...")
 		cancel()
 	}()
 }
@@ -145,7 +138,7 @@ func (h *OutputHandler) HandleResult(result *types.ScanResult) {
 			gologger.Error().Msgf("控制台输出失败: %v", outputErr)
 		}
 	}
-	
+
 	// 文件输出
 	if h.fileOutput != nil {
 		fileErr := h.fileOutput.Output(result)
@@ -160,7 +153,7 @@ func setupOutputHandlers(options *types.Options) (*OutputHandler, error) {
 	handler := &OutputHandler{
 		consoleOutput: output.NewConsoleOuter("", options.Silent),
 	}
-	
+
 	// 创建文件输出器（如果需要）
 	if options.Output != "" {
 		switch options.OutputType {
@@ -172,6 +165,6 @@ func setupOutputHandlers(options *types.Options) (*OutputHandler, error) {
 			handler.fileOutput = output.NewConsoleOuter(options.Output, false) // 文件输出不需要静默模式
 		}
 	}
-	
+
 	return handler, nil
 }

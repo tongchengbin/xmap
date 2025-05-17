@@ -81,10 +81,6 @@ func (p *Probe) HasSSLPort(port int) bool {
 }
 
 func (p *Probe) Match(response []byte) (*Match, map[string]interface{}) {
-	if &CPULimit != nil {
-		CPULimit.Add()
-		defer CPULimit.Done()
-	}
 	for _, m := range p.MatchGroup {
 		matcher, err := m.regex.FindStringMatch(string(response))
 		if err != nil {

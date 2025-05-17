@@ -253,7 +253,6 @@ func (s *ServiceScanner) executeTCPProbe(ctx context.Context, target *types.Scan
 		return nil, types.ParseNetworkError(err)
 	}
 	response, err := s.readResponse(conn, timeout)
-
 	if len(response) > 0 {
 		return response, types.ErrNil
 	}
@@ -404,7 +403,6 @@ func (s *ServiceScanner) readResponse(conn net.Conn, timeout time.Duration) ([]b
 			// 否则返回超时错误
 			return responseData, fmt.Errorf(fmt.Sprintf("max read timeout: %s", timeout.String()))
 		}
-
 		// 设置单次读取超时
 		remainingTime := maxReadTime.Sub(time.Now())
 		if remainingTime <= 0 {
@@ -420,7 +418,6 @@ func (s *ServiceScanner) readResponse(conn net.Conn, timeout time.Duration) ([]b
 			if n < len(buffer) {
 				break
 			}
-
 			// 如果响应数据已经足够大，停止读取
 			if len(responseData) >= 4096 {
 				break

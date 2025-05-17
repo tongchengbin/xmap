@@ -72,19 +72,25 @@ func (x *XMap) init() error {
 // Scan 扫描单个目标
 func (x *XMap) Scan(ctx context.Context, target *types.ScanTarget) (*types.ScanResult, error) {
 	// 1. 执行服务扫描
+	if web.ShouldScan(target.Scheme) {
+		// 构建URL
+		result := types.NewScanResult(target)
+		url := x.buildTargetURL(target, target.Scheme)
+		// 执行Web扫描
+		webResult, err := x.webScanner.ScanWithContext(ctx, url)
+		x.enrichResultWithWebData(result, webResult)
+		return result, err
+	}
 	result, err := x.serviceScanner.ScanWithContext(ctx, target)
 	if err != nil {
 		return nil, err
 	}
-
 	// 2. 标准化结果格式
 	x.normalizeResult(result)
-
 	// 3. 如果是Web服务，执行Web扫描
 	if web.ShouldScan(result.Service) && x.webScanner != nil {
 		// 构建URL
 		url := x.buildTargetURL(target, result.Service)
-
 		// 执行Web扫描
 		webResult, err := x.webScanner.ScanWithContext(ctx, url)
 		if err != nil {
@@ -248,36 +254,29 @@ func (x *XMap) ScanWithCallback(ctx context.Context, targets input.Provider, cal
 	if x.options.Threads <= 0 {
 		x.options.Threads = 10
 	}
-
 	// 创建上下文，支持取消
 	scanCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-
 	// 启动扫描协程池
 	wg := sizedwaitgroup.New(x.options.Threads)
-
 	// 处理每个目标
 	targets.Scan(func(target *types.ScanTarget) bool {
 		// 添加到等待组
 		wg.Add()
-
 		// 为每个目标启动一个goroutine
 		go func(target *types.ScanTarget) {
 			defer wg.Done()
-
 			// 检查上下文是否已取消
 			if scanCtx.Err() != nil {
 				x.handleScanError(callback, target, scanCtx.Err())
 				return
 			}
-
 			// 执行扫描
 			result, err := x.Scan(scanCtx, target)
 			if err != nil {
 				x.handleScanError(callback, target, err)
 				return
 			}
-
 			// 调用回调函数
 			if callback != nil {
 				callback(result)
