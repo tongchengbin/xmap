@@ -405,3 +405,9 @@ func TestScanHttps(t *testing.T) {
 	assert.NotNil(t, result)
 	assert.True(t, len(result.Components) > 0)
 }
+
+func BenchmarkNewXmap(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		_, _ = New(types.DefaultOptions())
+	}
+}

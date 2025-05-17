@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"strconv"
+	"strings"
+	"sync"
+
 	"github.com/remeh/sizedwaitgroup"
 	"github.com/tongchengbin/appfinger/pkg/external/customrules"
 	"github.com/tongchengbin/xmap/pkg/input"
 	"github.com/tongchengbin/xmap/pkg/scanner"
-	"strconv"
-	"strings"
-	"sync"
 
 	"github.com/projectdiscovery/gologger"
 	"github.com/tongchengbin/xmap/pkg/probe"
@@ -18,16 +19,21 @@ import (
 	"github.com/tongchengbin/xmap/pkg/web"
 )
 
-// XMap 是公共API接口，用于与外部系统集成
+// ScannerConfig 扫描器配置接口
+type ScannerConfig interface {
+	GetOptions() *types.Options
+}
+
+// XMap 是核心扫描引擎，负责协调各种扫描器
 type XMap struct {
-	// 扫描器
-	scanner *scanner.ServiceScanner
-	// Web扫描器
+	// 服务扫描器 - 负责基础网络服务探测
+	serviceScanner *scanner.ServiceScanner
+	// Web扫描器 - 负责Web应用指纹识别
 	webScanner *web.Scanner
 	// 指纹管理器
 	probeManager *probe.Manager
-	// 默认选项
-	Options *types.Options
+	// 配置选项
+	options *types.Options
 	// 初始化锁
 	initOnce sync.Once
 }
@@ -36,65 +42,76 @@ type XMap struct {
 func New(options *types.Options) (*XMap, error) {
 	// 创建XMap实例
 	x := &XMap{
-		Options: options,
+		options: options,
 	}
-	// 延迟初始化
+	// 初始化扫描引擎
 	err := x.init()
 	return x, err
 }
 
-// init 初始化XMap
+// init 初始化XMap扫描引擎
 func (x *XMap) init() error {
-	// 初始化默认管理器（如果尚未初始化）
-	err := probe.InitDefaultManager()
-	if err != nil {
-		return err
-	}
-	// 创建服务扫描器
-	x.scanner, err = scanner.NewServiceScanner(x.Options)
-	if err != nil {
-		return err
-	}
-	// 初始化规则库
-	err = InitRuleManager(customrules.GetDefaultDirectory())
-	if err != nil {
-		return err
-	}
-	// 创建Web扫描器
-	x.webScanner, err = web.NewScanner(x.Options)
-	if err != nil {
-		return err
-	}
-	return nil
+	// 使用sync.Once确保只初始化一次
+	var initErr error
+	x.initOnce.Do(func() {
+		// 初始化默认指纹管理器
+		initErr = probe.InitDefaultManager()
+		if initErr != nil {
+			return
+		}
+		// 创建服务扫描器
+		x.serviceScanner, initErr = scanner.NewServiceScanner(x.options)
+		if initErr != nil {
+			return
+		}
+		// 初始化Web规则库
+		initErr = InitRuleManager(customrules.GetDefaultDirectory())
+		if initErr != nil {
+			return
+		}
+		// 创建Web扫描器
+		x.webScanner, initErr = web.NewScanner(x.options)
+	})
+
+	return initErr
 }
 
 // Scan 扫描单个目标
 func (x *XMap) Scan(ctx context.Context, target *types.ScanTarget) (*types.ScanResult, error) {
-	// 执行扫描
-	result, err := x.scanner.ScanWithContext(ctx, target)
+	// 1. 执行服务扫描
+	result, err := x.serviceScanner.ScanWithContext(ctx, target)
 	if err != nil {
 		return nil, err
 	}
-	x.convertResult(result)
-	// 如果是Web服务，执行Web扫描
+
+	// 2. 标准化结果格式
+	x.normalizeResult(result)
+
+	// 3. 如果是Web服务，执行Web扫描
 	if web.ShouldScan(result.Service) && x.webScanner != nil {
+		// 构建URL
+		url := x.buildTargetURL(target, result.Service)
+
 		// 执行Web扫描
-		var url string
-		if target.Host == "" {
-			url = fmt.Sprintf("%s://%s:%d", result.Service, target.IP, target.Port)
-		} else {
-			url = fmt.Sprintf("%s://%s:%d", result.Service, target.Host, target.Port)
-		}
 		webResult, err := x.webScanner.ScanWithContext(ctx, url)
 		if err != nil {
 			gologger.Debug().Msgf("Web扫描失败: %v", err)
 		} else {
-			// 使用Web扫描结果丰富结果
+			// 合并Web扫描结果
 			x.enrichResultWithWebData(result, webResult)
 		}
 	}
 
 	return result, nil
+}
+
+// buildTargetURL 构建目标URL
+func (x *XMap) buildTargetURL(target *types.ScanTarget, service string) string {
+	if target.Host == "" {
+		return fmt.Sprintf("%s://%s:%d", service, target.IP, target.Port)
+	} else {
+		return fmt.Sprintf("%s://%s:%d", service, target.Host, target.Port)
+	}
 }
 
 // enrichResultWithWebData 使用Web扫描数据丰富扫描结果
@@ -157,8 +174,8 @@ func (x *XMap) enrichResultWithWebData(result *types.ScanResult, webResult *web.
 	}
 }
 
-// convertResult 转换扫描结果
-func (x *XMap) convertResult(result *types.ScanResult) {
+// normalizeResult 标准化扫描结果
+func (x *XMap) normalizeResult(result *types.ScanResult) {
 	result.Protocol = result.Target.Protocol
 	result.Hostname = result.Target.Host
 	// 设置端口
@@ -235,47 +252,66 @@ func (x *XMap) ParseTargetsString(targetsStr string) ([]*types.ScanTarget, error
 // 每完成一个目标的扫描就调用回调函数，适用于需要实时处理结果的场景
 func (x *XMap) ScanWithCallback(ctx context.Context, targets input.Provider, callback func(*types.ScanResult)) error {
 	// 设置默认并行数
-	if x.Options.Threads <= 0 {
-		x.Options.Threads = 10
+	if x.options.Threads <= 0 {
+		x.options.Threads = 10
 	}
+
 	// 创建上下文，支持取消
 	scanCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	// 启动扫描协程
-	wg := sizedwaitgroup.New(x.Options.Threads)
+
+	// 启动扫描协程池
+	wg := sizedwaitgroup.New(x.options.Threads)
+
+	// 处理每个目标
 	targets.Scan(func(target *types.ScanTarget) bool {
+		// 添加到等待组
 		wg.Add()
+
+		// 为每个目标启动一个goroutine
 		go func(target *types.ScanTarget) {
 			defer wg.Done()
+
 			// 检查上下文是否已取消
 			if scanCtx.Err() != nil {
-				if callback != nil {
-					callback(&types.ScanResult{
-						Target: target,
-						Error:  scanCtx.Err(),
-					})
-				}
+				x.handleScanError(callback, target, scanCtx.Err())
 				return
 			}
+
 			// 执行扫描
 			result, err := x.Scan(scanCtx, target)
-			if err != nil && callback != nil {
-				callback(&types.ScanResult{
-					Target: target,
-					Error:  err,
-				})
+			if err != nil {
+				x.handleScanError(callback, target, err)
 				return
 			}
+
 			// 调用回调函数
 			if callback != nil {
 				callback(result)
 			}
 		}(target)
-		return true
+
+		return true // 继续处理下一个目标
 	})
+
 	// 等待所有扫描完成
 	wg.Wait()
 	return nil
+}
+
+// handleScanError 处理扫描错误
+func (x *XMap) handleScanError(callback func(*types.ScanResult), target *types.ScanTarget, err error) {
+	if callback != nil {
+		callback(&types.ScanResult{
+			Target: target,
+			Error:  err,
+		})
+	}
+}
+
+// GetOptions 获取选项
+func (x *XMap) GetOptions() *types.Options {
+	return x.options
 }
 
 // UpdateRules 更新指纹规则库

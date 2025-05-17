@@ -59,11 +59,12 @@ type Options struct {
 
 func DefaultOptions() *Options {
 	return &Options{
-		Timeout:    6,
-		MaxTimeout: 180,
-		Silent:     false,
-		NoProgress: false,
-		OutputType: "json",
-		Banner:     "",
+		Timeout:          6,
+		MaxTimeout:       180,
+		Silent:           false,
+		NoProgress:       false,
+		OutputType:       "json",
+		Banner:           "",
+		VersionIntensity: 7,
 	}
 }

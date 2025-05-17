@@ -31,6 +31,7 @@ func NewServiceScanner(options *types.Options) (*ServiceScanner, error) {
 	probeManager, err := probe.GetManager(&probe.FingerprintOptions{
 		VersionIntensity: options.VersionIntensity,
 	})
+	//var probeManager *probe.Manager
 	if err != nil {
 		gologger.Error().Msgf("获取指纹管理器失败: %v", err)
 		return nil, err

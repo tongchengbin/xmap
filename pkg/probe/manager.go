@@ -84,14 +84,13 @@ func InitDefaultManager() error {
 	if DefaultProbeManager != nil {
 		return nil // 已经初始化
 	}
-
 	options := &FingerprintOptions{
 		ProbeFilePath:    getDefaultProbeFilePath(),
 		VersionIntensity: 7,
 	}
-
 	var err error
 	DefaultProbeManager, err = NewManager(options)
+	println("DEF", DefaultProbeManager)
 	return err
 }
 
@@ -103,11 +102,9 @@ func GetManager(options *FingerprintOptions) (*Manager, error) {
 			return nil, fmt.Errorf("failed to initialize default probe manager: %w", err)
 		}
 	}
-	// 如果没有提供选项或选项与默认管理器相同，返回默认管理器
-	if options == nil || options.Equals(DefaultProbeManager.options) {
+	if options.ProbeFilePath == DefaultProbeManager.options.ProbeFilePath && options.VersionIntensity == DefaultProbeManager.options.VersionIntensity {
 		return DefaultProbeManager, nil
 	}
-
 	// 创建新的管理器
 	return NewManager(options)
 }
