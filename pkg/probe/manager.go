@@ -59,22 +59,18 @@ func getDefaultProbeFilePath() string {
 	if path := os.Getenv("XMAP_PROBE_FILE"); path != "" {
 		return path
 	}
-
+	// home 目录
+	homeDir, _ := os.UserHomeDir()
 	// 然后尝试常见的位置
 	commonPaths := []string{
 		"nmap-service-probes",
-		"./nmap-service-probes",
-		"/etc/xmap/nmap-service-probes",
-		"/usr/share/nmap/nmap-service-probes",
-		"/usr/local/share/nmap/nmap-service-probes",
+		homeDir + "/nmap-service-probes",
 	}
-
 	for _, path := range commonPaths {
 		if _, err := os.Stat(path); err == nil {
 			return path
 		}
 	}
-
 	// 如果都找不到，返回空字符串，将使用内嵌的默认探针数据
 	return ""
 }
