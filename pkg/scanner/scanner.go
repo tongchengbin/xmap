@@ -31,10 +31,25 @@ func NewServiceScanner(options *types.Options) (*ServiceScanner, error) {
 	probeManager, err := probe.GetManager(&probe.FingerprintOptions{
 		VersionIntensity: options.VersionIntensity,
 	})
-	//var probeManager *probe.Manager
 	if err != nil {
 		gologger.Error().Msgf("获取指纹管理器失败: %v", err)
 		return nil, err
+	}
+	
+	return NewServiceScannerWithProbeManager(options, probeManager)
+}
+
+// NewServiceScannerWithProbeManager 使用自定义指纹管理器创建扫描器
+func NewServiceScannerWithProbeManager(options *types.Options, probeManager *probe.Manager) (*ServiceScanner, error) {
+	if probeManager == nil {
+		var err error
+		probeManager, err = probe.GetManager(&probe.FingerprintOptions{
+			VersionIntensity: options.VersionIntensity,
+		})
+		if err != nil {
+			gologger.Error().Msgf("获取指纹管理器失败: %v", err)
+			return nil, err
+		}
 	}
 	// 创建fastdialer实例
 	fdOptions := fastdialer.DefaultOptions

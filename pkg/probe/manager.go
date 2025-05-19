@@ -26,37 +26,21 @@ type Manager struct {
 }
 
 var (
-	// DefaultProbeManager 默认的探针管理器
-	DefaultProbeManager *Manager
+	// 确保线程安全的初始化
+	managerMutex sync.Mutex
+	// 管理器实例映射，用于存储不同配置的管理器实例
+	managerInstances = make(map[string]*Manager)
 )
 
-// NewManager 创建新的指纹管理器
-func NewManager(options *FingerprintOptions) (*Manager, error) {
-	if options == nil {
-		options = &FingerprintOptions{
-			ProbeFilePath:    getDefaultProbeFilePath(),
-			VersionIntensity: 7,
-		}
-	} else if options.ProbeFilePath == "" {
-		options.ProbeFilePath = getDefaultProbeFilePath()
-	}
-
-	manager := &Manager{
-		options:    options,
-		probeStore: NewProbeStore(),
-	}
-
-	err := manager.Load()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load probe data: %w", err)
-	}
-	return manager, nil
+// 生成配置的唯一键
+func generateConfigKey(options *FingerprintOptions) string {
+	return fmt.Sprintf("%s:%d", options.ProbeFilePath, options.VersionIntensity)
 }
 
-// getDefaultProbeFilePath 获取默认的探针文件路径
-func getDefaultProbeFilePath() string {
+// GetDefaultProbeFilePath 获取默认的探针文件路径
+func GetDefaultProbeFilePath() string {
 	// 首先尝试从环境变量获取
-	if path := os.Getenv("XMAP_PROBE_FILE"); path != "" {
+	if path := os.Getenv("NMAP_PROBE_FILE"); path != "" {
 		return path
 	}
 	// home 目录
@@ -77,19 +61,44 @@ func getDefaultProbeFilePath() string {
 
 // GetManager 根据选项获取指纹管理器
 func GetManager(options *FingerprintOptions) (*Manager, error) {
-	// 确保默认管理器已初始化
-	var err error
-	if DefaultProbeManager == nil {
-		DefaultProbeManager, err = NewManager(options)
-		if err != nil {
-			return nil, err
+	if options == nil {
+		options = &FingerprintOptions{
+			ProbeFilePath:    GetDefaultProbeFilePath(),
+			VersionIntensity: 7,
 		}
 	}
-	if options.ProbeFilePath == DefaultProbeManager.options.ProbeFilePath && options.VersionIntensity == DefaultProbeManager.options.VersionIntensity {
-		return DefaultProbeManager, nil
+	// 标准化选项
+	if options.VersionIntensity < 0 {
+		options.VersionIntensity = 7
 	}
-	// 创建新的管理器
-	return NewManager(options)
+	// 生成配置键
+	configKey := generateConfigKey(options)
+
+	// 获取锁，确保并发安全
+	managerMutex.Lock()
+	defer managerMutex.Unlock()
+	
+	// 检查是否已存在实例
+	manager, exists := managerInstances[configKey]
+	if exists {
+		return manager, nil
+	}
+	
+	// 创建新实例
+	manager = &Manager{
+		options:    options,
+		probeStore: NewProbeStore(),
+	}
+	
+	// 加载指纹库
+	err := manager.Load()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load probe data: %w", err)
+	}
+	
+	// 存储实例
+	managerInstances[configKey] = manager
+	return manager, nil
 }
 
 // updateOptions 更新指纹管理器选项
@@ -102,7 +111,6 @@ func (fm *Manager) updateOptions(options *FingerprintOptions) {
 	if options.VersionIntensity > 0 {
 		fm.options.VersionIntensity = options.VersionIntensity
 	}
-
 	// 更新探针文件路径
 	if options.ProbeFilePath != "" {
 		fm.options.ProbeFilePath = options.ProbeFilePath
@@ -218,25 +226,39 @@ func (fm *Manager) GetProbesByVersionIntensity(intensity int) ([]*Probe, []*Prob
 	tcpProbes := store.GetTCPProbes()
 	udpProbes := store.GetUDPProbes()
 
-	// 根据版本强度筛选探针
-	var filteredTCPProbes []*Probe
-	var filteredUDPProbes []*Probe
+	// 按版本强度过滤
+	var filteredTCPProbes, filteredUDPProbes []*Probe
 
-	// 根据稀有度筛选TCP探针
+	// 过滤 TCP 探针
 	for _, probe := range tcpProbes {
-		if probe.Rarity <= intensity || intensity == 9 {
+		if probe.Rarity <= intensity {
 			filteredTCPProbes = append(filteredTCPProbes, probe)
 		}
 	}
 
-	// 根据稀有度筛选UDP探针
+	// 过滤 UDP 探针
 	for _, probe := range udpProbes {
-		if probe.Rarity <= intensity || intensity == 9 {
+		if probe.Rarity <= intensity {
 			filteredUDPProbes = append(filteredUDPProbes, probe)
 		}
 	}
 
 	return filteredTCPProbes, filteredUDPProbes
+}
+
+// ForceReload 强制重新加载所有指纹管理器
+func ForceReload() error {
+	managerMutex.Lock()
+	defer managerMutex.Unlock()
+
+	var lastErr error
+	for _, manager := range managerInstances {
+		if err := manager.Load(); err != nil {
+			lastErr = err
+			gologger.Error().Msgf("重新加载指纹管理器失败: %v", err)
+		}
+	}
+	return lastErr
 }
 
 // Load 从文件加载探针数据

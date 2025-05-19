@@ -59,7 +59,7 @@ func (x *XMap) init() error {
 		return initErr
 	}
 	// 初始化Web规则库
-	initErr = InitRuleManager(customrules.GetDefaultDirectory())
+	initErr = InitWebRuleManager(customrules.GetDefaultDirectory())
 	if initErr != nil {
 		return initErr
 	}
@@ -310,5 +310,5 @@ func (x *XMap) GetOptions() *types.Options {
 
 // UpdateRules 更新指纹规则库
 func (x *XMap) UpdateRules() error {
-	return UpdateRules()
+	return UpdateWebRules()
 }

@@ -36,9 +36,14 @@ func NewScanner(options *types.Options) (*Scanner, error) {
 	return scanner, nil
 }
 
-// ReloadRules 重新加载指纹库规则
-func ReloadRules() error {
+// ReloadWebRules 重新加载Web指纹库规则
+func ReloadWebRules() error {
 	return rule.GetRuleManager().ReloadRules()
+}
+
+// ReloadRules 重新加载指纹库规则 (兼容旧版API)
+func ReloadRules() error {
+	return ReloadWebRules()
 }
 
 // ScanResult Web扫描结果
