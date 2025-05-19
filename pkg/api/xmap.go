@@ -78,6 +78,7 @@ func (x *XMap) Scan(ctx context.Context, target *types.ScanTarget) (*types.ScanR
 		url := x.buildTargetURL(target, target.Scheme)
 		// 执行Web扫描
 		webResult, err := x.webScanner.ScanWithContext(ctx, url)
+		result.Service = target.Scheme
 		x.enrichResultWithWebData(result, webResult)
 		return result, err
 	}
@@ -122,6 +123,7 @@ func (x *XMap) enrichResultWithWebData(result *types.ScanResult, webResult *web.
 	if result.Banner == nil {
 		result.Banner = make(map[string]interface{})
 	}
+	result.URL = webResult.URL
 	// 添加Banner信息到Metadata
 	if webResult.Banner != nil {
 		// 添加标题

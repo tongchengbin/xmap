@@ -58,12 +58,6 @@ func ShouldScan(service string) bool {
 
 // ScanWithContext 带上下文的Web扫描
 func (s *Scanner) ScanWithContext(ctx context.Context, url string) (*ScanResult, error) {
-	// 获取指纹库
-	finger := rule.GetRuleManager().GetFinger()
-	if finger == nil {
-		return nil, fmt.Errorf("指纹库未加载")
-	}
-
 	sdk, err := runner.NewRunner(s.crawler, rule.GetRuleManager(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("create Runner Error~")
