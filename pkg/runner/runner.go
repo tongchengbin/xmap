@@ -59,17 +59,6 @@ func (r *Runner) ShowBanner() {
 	}
 }
 
-// UpdateRules 更新指纹规则库
-func (r *Runner) UpdateRules() error {
-	gologger.Info().Msg("正在更新指纹规则库...")
-	err := r.xmap.UpdateRules()
-	if err != nil {
-		return err
-	}
-	gologger.Info().Msg("指纹规则库更新成功")
-	return nil
-}
-
 // RunEnumeration 执行扫描
 func (r *Runner) RunEnumeration() error {
 	// 创建上下文

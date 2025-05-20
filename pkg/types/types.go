@@ -170,6 +170,10 @@ func NewScanResult(target *ScanTarget) *ScanResult {
 	return &ScanResult{
 		Target:    target,
 		startTime: time.Now(),
+		IP:        target.IP,
+		Port:      target.Port,
+		Hostname:  target.Host,
+		Protocol:  target.Protocol,
 		Status:    StatusUnknown,
 	}
 }

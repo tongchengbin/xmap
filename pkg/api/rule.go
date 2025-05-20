@@ -37,7 +37,6 @@ func ReloadWebRules() error {
 // UpdateWebRules 从远程更新Web指纹库规则
 func UpdateWebRules() error {
 	gologger.Info().Msg("正在从远程更新Web指纹库规则...")
-
 	// 直接使用git拉取最新规则
 	rulesDir := customrules.GetDefaultDirectory()
 	gologger.Info().Msgf("Web指纹库路径: %s", rulesDir)

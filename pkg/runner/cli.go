@@ -53,7 +53,7 @@ func ParseOptions() (*types.Options, error) {
 	// 创建Web扫描选项组
 	flagSet.CreateGroup("Web扫描", "Web扫描选项",
 		flagSet.StringVarP(&options.AppFingerHome, "fingerprint-path", "d", "", "指纹库路径，默认使用内置路径"),
-		flagSet.BoolVarP(&options.UpdateAppFingerRule, "update-rule", "ur", false, "更新指纹规则库"),
+
 		flagSet.StringVarP(&options.Proxy, "proxy", "x", "", "HTTP代理，格式: http://host:port"),
 		flagSet.BoolVarP(&options.DisableIcon, "disable-icon", "di", false, "禁用图标请求匹配"),
 		flagSet.BoolVarP(&options.DisableJS, "disable-js", "dj", false, "禁用JavaScript规则匹配"),
@@ -76,6 +76,7 @@ func ParseOptions() (*types.Options, error) {
 
 	// 创建其他选项组
 	flagSet.CreateGroup("其他", "其他选项",
+		flagSet.BoolVarP(&options.UpdateRule, "update-rule", "ur", false, "更新指纹规则库"),
 		flagSet.BoolVarP(&options.Version, "version", "V", false, "显示版本信息"),
 		flagSet.BoolVar(&options.EnablePprof, "enable-pprof", false, "启用性能分析"),
 	)

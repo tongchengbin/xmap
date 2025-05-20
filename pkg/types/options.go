@@ -43,9 +43,8 @@ type Options struct {
 	EnablePprof bool // 是否启用性能分析
 
 	// config
-	Version             bool   // 版本信息
-	Banner              string // Banner信息
-	UpdateAppFingerRule bool   // 是否更新指纹规则
+	Version bool   // 版本信息
+	Banner  string // Banner信息
 	// Debug
 	Debug         bool
 	DebugResponse bool // 是否打印响应数据

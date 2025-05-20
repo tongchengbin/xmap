@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/tongchengbin/xmap/pkg/api"
 	"os"
 
 	"github.com/projectdiscovery/gologger"
@@ -24,7 +25,7 @@ func main() {
 	xmapRunner.ShowBanner()
 	// 更新指纹规则库
 	if options.UpdateRule {
-		err = xmapRunner.UpdateRules()
+		err = api.UpdateWebRules()
 		if err != nil {
 			gologger.Fatal().Msgf("更新指纹规则库失败: %v", err)
 		}

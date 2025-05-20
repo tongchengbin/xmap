@@ -307,8 +307,3 @@ func (x *XMap) handleScanError(callback func(*types.ScanResult), target *types.S
 func (x *XMap) GetOptions() *types.Options {
 	return x.options
 }
-
-// UpdateRules 更新指纹规则库
-func (x *XMap) UpdateRules() error {
-	return UpdateWebRules()
-}
