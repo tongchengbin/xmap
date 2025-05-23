@@ -8,7 +8,7 @@ import (
 )
 
 // Version 版本信息
-const Version = "v0.1.2"
+const Version = "v0.1.3"
 
 // Banner 程序的banner
 var Banner = fmt.Sprintf(`
