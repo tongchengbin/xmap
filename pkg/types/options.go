@@ -19,7 +19,7 @@ type Options struct {
 	Threads          int
 	FastMode         bool
 	UseAllProbes     bool
-	NmapProneName    goflags.StringSlice
+	NmapProneName    string
 	UseSSL           bool
 	VersionIntensity int
 	ServiceVersion   bool // 是否探测服务版本

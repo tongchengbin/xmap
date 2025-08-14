@@ -1,6 +1,7 @@
 package types
 
 import (
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -38,6 +39,10 @@ type ScanTarget struct {
 	Parsed bool `json:"-"`
 	// 状态检查器，用于跟踪连接状态，不输出到JSON
 	StatusCheck interface{} `json:"-"`
+	// TLS证书，不输出到JSON
+	TLSCertificates []*x509.Certificate `json:"-"`
+	// 证书信息，用于临时存储解析的证书数据
+	Certificate map[string]interface{} `json:"-"`
 }
 
 func NewTarget(raw string) *ScanTarget {
@@ -148,6 +153,8 @@ type ScanResult struct {
 	Service string `json:"service"`
 	// 是否使用SSL
 	SSL bool `json:"ssl"`
+	// 证书信息
+	Certificate *SSLResponse `json:"certificate,omitempty"`
 	// 附加信息
 	Extra       map[string]interface{} `json:"extra,omitempty"`
 	RawResponse []byte
@@ -174,6 +181,7 @@ func NewScanResult(target *ScanTarget) *ScanResult {
 		Port:      target.Port,
 		Hostname:  target.Host,
 		Protocol:  target.Protocol,
+		Banner:    make(map[string]interface{}),
 		Status:    StatusUnknown,
 	}
 }
@@ -192,9 +200,8 @@ func (r *ScanResult) Complete(err error) {
 	r.Error = err
 	r.endTime = time.Now()
 	r.Duration = r.endTime.Sub(r.startTime).Seconds()
-
 	// 根据错误类型设置状态
-	if err != nil {
+	if err != nil && r.Service == "" {
 		if err.Error() == "invalid target" {
 			r.Status = StatusInvalid
 		} else {
@@ -204,6 +211,9 @@ func (r *ScanResult) Complete(err error) {
 		r.Status = StatusMatched
 	} else {
 		r.Status = StatusNoMatch
+	}
+	if r.Service == "ssl" || r.Service == "tls" {
+		r.SSL = true
 	}
 }
 

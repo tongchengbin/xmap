@@ -1,13 +1,11 @@
 package probe
 
-// Protocol 定义协议类型
-type Protocol string
-
+// 定义协议类型常量
 const (
 	// TCP 协议
-	TCP Protocol = "tcp"
+	TCP = "tcp"
 	// UDP 协议
-	UDP Protocol = "UDP"
+	UDP = "udp"
 )
 
 // FingerprintOptions 指纹库配置选项
@@ -18,36 +16,17 @@ type FingerprintOptions struct {
 	VersionIntensity int
 }
 
-func (o *FingerprintOptions) Equals(other *FingerprintOptions) bool {
-	return o.ProbeFilePath == other.ProbeFilePath && o.VersionIntensity == other.VersionIntensity
-}
-
-// ProbeSource 定义探针数据源接口
-type ProbeSource interface {
-	// Load 加载探针数据
-	Load() (string, error)
-	// GetVersion 获取探针数据版本
-	GetVersion() string
-}
-
-// FileProbeSource 从文件加载探针数据
-type FileProbeSource struct {
-	FilePath string
-	Version  string
-}
-
-// EmbeddedProbeSource 从嵌入资源加载探针数据
-type EmbeddedProbeSource struct {
-	Data    string
-	Version string
-}
-
-// Load 从嵌入资源加载探针数据
-func (s *EmbeddedProbeSource) Load() (string, error) {
-	return s.Data, nil
-}
-
-// GetVersion 获取探针数据版本
-func (s *EmbeddedProbeSource) GetVersion() string {
-	return s.Version
+type MatchResult struct {
+	// 匹配的探针
+	Probe *Probe
+	// 匹配的规则
+	Match *Match
+	// 提取的版本信息
+	VersionInfo map[string]interface{}
+	// 是否通过fallback匹配
+	IsFallback bool
+	// fallback链路径（如果是通过fallback匹配的）
+	FallbackPath []string
+	// 原始响应数据
+	Response []byte
 }
