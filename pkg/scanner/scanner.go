@@ -35,7 +35,7 @@ func NewServiceScanner(options *types.Options) (*ServiceScanner, error) {
 		gologger.Error().Msgf("获取指纹管理器失败: %v", err)
 		return nil, err
 	}
-	
+
 	return NewServiceScannerWithProbeManager(options, probeManager)
 }
 
@@ -163,6 +163,8 @@ func (s *ServiceScanner) executeUDPProbes(ctx context.Context, target *types.Sca
 			if matchService != nil {
 				// 设置服务信息
 				result.Service = matchService.Service
+				result.RawResponse = response
+				result.MatchedProbe = pb.Name
 				// 设置额外信息
 				if extra != nil {
 					if result.Extra == nil {
@@ -367,6 +369,7 @@ func (s *ServiceScanner) createConnection(ctx context.Context, target *types.Sca
 			gologger.Debug().Msgf("TLS连接失败: %v", err)
 			return nil, err
 		}
+		// todo 获取证书
 		// 获取目标IP
 		if target.IP == "" && target.Host != "" {
 			dnsData, err := s.dialer.GetDNSData(target.Host)
