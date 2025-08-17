@@ -1,8 +1,9 @@
 package probe
 
 import (
-	"github.com/dlclark/regexp2"
 	"strings"
+
+	"github.com/dlclark/regexp2"
 )
 
 // VersionInfo 表示版本信息

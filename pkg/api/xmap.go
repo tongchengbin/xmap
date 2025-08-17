@@ -4,17 +4,17 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"github.com/tongchengbin/appfinger/pkg/external/customrules"
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/tongchengbin/appfinger/pkg/external/customrules"
 
 	"github.com/remeh/sizedwaitgroup"
 	"github.com/tongchengbin/xmap/pkg/input"
 	"github.com/tongchengbin/xmap/pkg/scanner"
 
 	"github.com/projectdiscovery/gologger"
-	"github.com/tongchengbin/xmap/pkg/probe"
 	"github.com/tongchengbin/xmap/pkg/types"
 	"github.com/tongchengbin/xmap/pkg/web"
 )
@@ -30,8 +30,6 @@ type XMap struct {
 	serviceScanner *scanner.ServiceScanner
 	// Web扫描器 - 负责Web应用指纹识别
 	webScanner *web.Scanner
-	// 指纹管理器
-	probeManager *probe.Manager
 	// 配置选项
 	options *types.Options
 	// 初始化锁
@@ -83,7 +81,10 @@ func (x *XMap) Scan(ctx context.Context, target *types.ScanTarget) (*types.ScanR
 		return result, err
 	}
 	result, err := x.serviceScanner.ScanWithContext(ctx, target)
-	if err != nil {
+	if err != nil && result != nil && result.Service == "" {
+		return nil, err
+	}
+	if result == nil {
 		return nil, err
 	}
 	// 2. 标准化结果格式
@@ -141,8 +142,9 @@ func (x *XMap) enrichResultWithWebData(result *types.ScanResult, webResult *web.
 		if webResult.Banner.IconBytes != nil {
 			result.Banner["icon"] = base64.StdEncoding.EncodeToString(webResult.Banner.IconBytes)
 		}
-		if webResult.Banner.Certificate != "" {
-			result.Banner["certificate"] = webResult.Banner.Certificate
+		if webResult.Banner.Cert != nil {
+			result.Certificate = types.FromTlsConnectionState(webResult.Banner.Cert)
+			result.Certificate.RawData = webResult.Banner.Certificate
 		}
 		if webResult.Banner.Charset != "" {
 			result.Banner["charset"] = webResult.Banner.Charset
@@ -197,7 +199,7 @@ func (x *XMap) normalizeResult(result *types.ScanResult) {
 	}
 	// 设置原始响应数据
 	if result.RawResponse != nil && len(result.RawResponse) > 0 {
-		result.Banner["tcp_banner"] = base64.StdEncoding.EncodeToString(result.RawResponse)
+		result.Banner["banner"] = base64.StdEncoding.EncodeToString(result.RawResponse)
 	}
 }
 

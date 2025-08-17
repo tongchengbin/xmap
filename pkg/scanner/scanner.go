@@ -4,10 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"golang.org/x/net/proxy"
 	"io"
 	"net"
-	"net/url"
 	"strings"
 	"time"
 
@@ -15,73 +13,33 @@ import (
 	"github.com/projectdiscovery/gologger"
 	"github.com/tongchengbin/xmap/pkg/probe"
 	"github.com/tongchengbin/xmap/pkg/types"
+	"github.com/tongchengbin/xmap/pkg/utils"
 )
 
 // ServiceScanner 默认扫描器实现
 type ServiceScanner struct {
 	// 版本强度
-	probeManager *probe.Manager
-	dialer       *fastdialer.Dialer
-	options      *types.Options
+	probeStore *probe.Store
+	dialer     *fastdialer.Dialer
+	options    *types.Options
 }
 
 // NewServiceScanner 创建新的扫描器
 func NewServiceScanner(options *types.Options) (*ServiceScanner, error) {
 	// 创建默认选项
-	probeManager, err := probe.GetManager(&probe.FingerprintOptions{
-		VersionIntensity: options.VersionIntensity,
-	})
+	probeStore, err := probe.GetStoreWithOptions(options.NmapProneName, options.VersionIntensity, false)
 	if err != nil {
-		gologger.Error().Msgf("获取指纹管理器失败: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("create probe store failed: %v", err)
 	}
-
-	return NewServiceScannerWithProbeManager(options, probeManager)
-}
-
-// NewServiceScannerWithProbeManager 使用自定义指纹管理器创建扫描器
-func NewServiceScannerWithProbeManager(options *types.Options, probeManager *probe.Manager) (*ServiceScanner, error) {
-	if probeManager == nil {
-		var err error
-		probeManager, err = probe.GetManager(&probe.FingerprintOptions{
-			VersionIntensity: options.VersionIntensity,
-		})
-		if err != nil {
-			gologger.Error().Msgf("获取指纹管理器失败: %v", err)
-			return nil, err
-		}
-	}
-	// 创建fastdialer实例
-	fdOptions := fastdialer.DefaultOptions
-	// 使用系统默认DNS
-	fdOptions.EnableFallback = true
-	// 使用内存缓存
-	fdOptions.CacheType = fastdialer.Memory
-	fdOptions.CacheMemoryMaxItems = 1000
-	if options.Proxy != "" {
-		// 使用代理
-		proxyURL, err := url.Parse(options.Proxy)
-		if err != nil {
-			return nil, err
-		}
-		dialer, err := proxy.FromURL(proxyURL, proxy.Direct)
-		if err != nil {
-			gologger.Error().Msgf("创建fastdialer失败: %v", err)
-			return nil, err
-		}
-		fdOptions.ProxyDialer = &dialer
-	}
-	fd, err := fastdialer.NewDialer(fdOptions)
+	dialer, err := fastdialer.NewDialer(fastdialer.DefaultOptions)
 	if err != nil {
-		gologger.Error().Msgf("创建fastdialer失败: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("create dialer failed: %v", err)
 	}
-	scanner := &ServiceScanner{
-		options:      options,
-		probeManager: probeManager,
-		dialer:       fd,
-	}
-	return scanner, nil
+	return &ServiceScanner{
+		probeStore: probeStore,
+		dialer:     dialer,
+		options:    options,
+	}, nil
 }
 
 // Scan 扫描单个目标
@@ -96,9 +54,9 @@ func (s *ServiceScanner) ScanWithContext(ctx context.Context, target *types.Scan
 	// 选择适用的探针
 	var probes []*probe.Probe
 	if target.Protocol == "tcp" {
-		probes = s.probeManager.GetTCPProbes()
+		probes = s.probeStore.GetTCPProbes()
 	} else {
-		probes = s.probeManager.GetUDPProbes()
+		probes = s.probeStore.GetUDPProbes()
 	}
 	// sort probes by rarity
 	if len(probes) == 0 {
@@ -118,21 +76,29 @@ func (s *ServiceScanner) ScanWithContext(ctx context.Context, target *types.Scan
 	// 执行扫描
 	err := s.executeProbes(ctx, target, probes, false, result)
 	if result.Service == "ssl" {
+		certInfo, err := utils.ParseCertificatesFromServerHello(result.RawResponse)
+		if err == nil {
+			result.Certificate = certInfo
+			gologger.Debug().Msgf("parse certificates from server hello success: %v", certInfo)
+		}
 		probes = sortProbes(probes, target.Port, true)
 		err = s.executeProbes(ctx, target, probes, true, result)
+		if err != nil {
+			gologger.Debug().Msgf("SSL scan failed: %v", err)
+		}
 	}
 	result.Complete(err)
 	return result, err
 }
 
 // executeProbes 执行探针扫描
-func (s *ServiceScanner) executeProbes(ctx context.Context, target *types.ScanTarget, probes []*probe.Probe, useSSl bool, result *types.ScanResult) error {
+func (s *ServiceScanner) executeProbes(ctx context.Context, target *types.ScanTarget, probes []*probe.Probe, useSSL bool, result *types.ScanResult) error {
 	// 根据协议类型选择不同的处理逻辑
 	switch target.Protocol {
 	case "udp":
 		return s.executeUDPProbes(ctx, target, probes, result)
 	default: // TCP
-		return s.executeTCPProbes(ctx, target, probes, useSSl, result)
+		return s.executeTCPProbes(ctx, target, probes, useSSL, result)
 	}
 }
 
@@ -153,25 +119,34 @@ func (s *ServiceScanner) executeUDPProbes(ctx context.Context, target *types.Sca
 		if s.options.DebugResponse && len(response) > 0 {
 			gologger.Print().Msgf("Read (%d bytes) for UDP probe %s on %s:%d:\n%s", len(response), pb.Name, target.IP, target.Port, formatProbeData(response))
 		}
-
 		if len(response) > 0 {
 			// 匹配响应
 			if sc, ok := target.StatusCheck.(*types.PortStatusCheck); ok {
 				sc.SetOpen()
 			}
-			matchService, extra := pb.Match(response)
-			if matchService != nil {
+			matchResult, err := pb.Match(response)
+			if err != nil {
+				gologger.Debug().Msgf("匹配错误: %v", err)
+				continue
+			}
+			if matchResult != nil {
 				// 设置服务信息
-				result.Service = matchService.Service
+				result.Service = matchResult.Match.Service
 				result.RawResponse = response
 				result.MatchedProbe = pb.Name
+				// 如果是通过回退匹配的，记录日志
+				if matchResult.IsFallback {
+					gologger.Debug().Msgf("通过回退匹配成功: %s -> %s, 路径: %v",
+						pb.Name, matchResult.Probe.Name, matchResult.FallbackPath)
+				}
+
 				// 设置额外信息
-				if extra != nil {
+				if matchResult.VersionInfo != nil {
 					if result.Extra == nil {
 						result.Extra = make(map[string]interface{})
 					}
-					// 直接将 extra 中的键值对添加到 result.Extra 中
-					for k, v := range extra {
+					// 直接将 VersionInfo 中的键值对添加到 result.Extra 中
+					for k, v := range matchResult.VersionInfo {
 						result.Extra[k] = v
 					}
 				}
@@ -191,7 +166,7 @@ func (s *ServiceScanner) executeUDPProbes(ctx context.Context, target *types.Sca
 }
 
 // executeTCPProbes 执行 TCP 探针扫描
-func (s *ServiceScanner) executeTCPProbes(ctx context.Context, target *types.ScanTarget, probes []*probe.Probe, useSSl bool, result *types.ScanResult) error {
+func (s *ServiceScanner) executeTCPProbes(ctx context.Context, target *types.ScanTarget, probes []*probe.Probe, useSSL bool, result *types.ScanResult) error {
 	// 对每个探针执行扫描
 	for _, pb := range probes {
 		// 检查上下文是否已取消
@@ -202,7 +177,7 @@ func (s *ServiceScanner) executeTCPProbes(ctx context.Context, target *types.Sca
 			// 继续处理
 		}
 		// 执行 TCP 探针
-		response, errType := s.executeTCPProbe(ctx, target, pb, useSSl)
+		response, errType := s.executeTCPProbe(ctx, target, pb, useSSL)
 		if s.options.DebugResponse && len(response) > 0 {
 			gologger.Print().Msgf("Read (%d bytes) for TCP probe %s on %s:%d:\n%s", len(response), pb.Name, target.IP, target.Port, formatProbeData(response))
 		}
@@ -211,20 +186,34 @@ func (s *ServiceScanner) executeTCPProbes(ctx context.Context, target *types.Sca
 			if sc, ok := target.StatusCheck.(*types.PortStatusCheck); ok {
 				sc.SetOpen()
 			}
-			matchService, extra := pb.Match(response)
+			matchResult, err := pb.Match(response)
+			if err != nil {
+				gologger.Debug().Msgf("匹配错误: %v", err)
+				continue
+			}
 			// 如果匹配成功
-			if matchService != nil {
-				if useSSl {
-					gologger.Debug().Msgf("Matched probe %s on (ssl)%s://%s:%d line on:%d", pb.Name, matchService.Service, target.IP, target.Port, matchService.Line)
+			if matchResult != nil {
+				if useSSL {
+					gologger.Debug().Msgf("Matched probe %s on (ssl)%s://%s:%d", pb.Name, matchResult.Match.Service, target.IP, target.Port)
 				} else {
-					gologger.Debug().Msgf("Matched probe %s on %s://%s:%d line on:%d", pb.Name, matchService.Service, target.IP, target.Port, matchService.Line)
+					gologger.Debug().Msgf("Matched probe %s on %s://%s:%d", pb.Name, matchResult.Match.Service, target.IP, target.Port)
 				}
-				result.Extra = extra
-				result.Service = matchService.Service
-				result.SSL = useSSl
+				// 如果是通过回退匹配的，记录日志
+				if matchResult.IsFallback {
+					gologger.Debug().Msgf("通过回退匹配成功: %s -> %s, 路径: %v",
+						pb.Name, matchResult.Probe.Name, matchResult.FallbackPath)
+				}
+				// 设置服务信息
+				result.Extra = matchResult.VersionInfo
+				result.Service = matchResult.Match.Service
+				result.RawResponse = response
+				result.MatchedProbe = pb.Name
+				result.SSL = useSSL
 				return nil
 			}
 		}
+
+		// 处理错误
 		if sc, ok := target.StatusCheck.(*types.PortStatusCheck); ok {
 			shouldTerminate := sc.HandleError(errType, target)
 			if shouldTerminate {
@@ -232,6 +221,13 @@ func (s *ServiceScanner) executeTCPProbes(ctx context.Context, target *types.Sca
 			}
 		}
 	}
+
+	// 如果没有匹配到任何服务，但端口是开放的
+	if sc, ok := target.StatusCheck.(*types.PortStatusCheck); ok && sc.Open > 0 {
+		result.Service = "unknown"
+		return nil
+	}
+
 	// 如果没有匹配到任何服务
 	return errors.New("not matched")
 }
@@ -270,6 +266,23 @@ func (s *ServiceScanner) executeTCPProbe(ctx context.Context, target *types.Scan
 		return nil, types.ParseNetworkError(err)
 	}
 	response, err := s.readResponse(conn, timeout)
+
+	// 检查是否是 SSL 探针
+	isSSLProbe := strings.Contains(strings.ToLower(probe.Name), "ssl") || strings.Contains(strings.ToLower(probe.Name), "tls")
+
+	// 如果是 SSL 探针且有响应数据，尝试直接从响应中解析证书
+	if isSSLProbe && len(response) > 0 {
+		// 尝试从响应数据中解析证书
+		certInfo, certErr := utils.ParseCertificatesFromServerHello(response)
+		if certErr == nil && certInfo != nil {
+			// 如果成功解析到证书信息，将其保存到目标对象中
+			// 将结构化证书信息保存到目标对象中
+			target.Certificate = certInfo.CertInfo
+			// 将可读性信息临时存储，稍后会在 executeTCPProbes 中将其添加到 result.Extra
+			gologger.Debug().Msgf("成功从 SSL 探针响应数据中直接解析证书信息")
+		}
+	}
+
 	if len(response) > 0 {
 		return response, types.ErrNil
 	}
@@ -345,7 +358,6 @@ func (s *ServiceScanner) executeUDPProbe(ctx context.Context, target *types.Scan
 
 // createConnection 创建网络连接
 func (s *ServiceScanner) createConnection(ctx context.Context, target *types.ScanTarget, useSSL bool, timeout time.Duration) (net.Conn, error) {
-	// 构建连接地址
 	address := fmt.Sprintf("%s:%d", target.Host, target.Port)
 	// 使用fastdialer处理连接
 	var conn net.Conn
