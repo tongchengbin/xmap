@@ -9,6 +9,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/hex"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -19,6 +20,7 @@ type TLSInfo struct {
 	Version      string
 	TLSVersion   string
 	CipherSuite  string
+	JA3S         string
 	RawData      []byte
 }
 
@@ -28,6 +30,8 @@ type SSLResponse struct {
 	TLSVersion  string `json:"tls_version"`  // TLS 版本
 	CipherSuite string `json:"cipher_suite"` // 加密套件
 	RawData     string `json:"raw_data"`     // 原始 SSL 数据
+	// JA3S指纹
+	JA3S string `json:"ja3s,omitempty"` // JA3S指纹
 	// 结构化证书信息
 	CertInfo map[string]any `json:"cert_info"`
 }
@@ -41,6 +45,17 @@ func FromTlsConnectionState(state *tls.ConnectionState) *SSLResponse {
 		CertInfo:    make(map[string]interface{}),
 		// 如果需要原始数据，应该在调用该函数后单独设置
 		RawData: "",
+	}
+	var extensions []uint16
+
+	// 检查是否支持ALPN
+	if state.NegotiatedProtocol != "" {
+		extensions = append(extensions, 16) // ALPN扩展ID
+	}
+
+	// 检查是否使用了会话票证
+	if state.DidResume {
+		extensions = append(extensions, 35) // Session Ticket扩展ID
 	}
 
 	// 检查是否有证书
@@ -61,10 +76,10 @@ func FromTlsConnectionState(state *tls.ConnectionState) *SSLResponse {
 		subject["country"] = cert.Subject.Country[0]
 	}
 	if len(cert.Subject.Organization) > 0 {
-		subject["organization"] = cert.Subject.Organization[0]
+		subject["org"] = cert.Subject.Organization[0]
 	}
 	if len(cert.Subject.OrganizationalUnit) > 0 {
-		subject["organizational_unit"] = cert.Subject.OrganizationalUnit[0]
+		subject["org_unit"] = cert.Subject.OrganizationalUnit[0]
 	}
 	sslResponse.CertInfo["subject"] = subject
 
@@ -77,7 +92,7 @@ func FromTlsConnectionState(state *tls.ConnectionState) *SSLResponse {
 		issuer["country"] = cert.Issuer.Country[0]
 	}
 	if len(cert.Issuer.Organization) > 0 {
-		issuer["organization"] = cert.Issuer.Organization[0]
+		issuer["org"] = cert.Issuer.Organization[0]
 	}
 	sslResponse.CertInfo["issuer"] = issuer
 
@@ -165,4 +180,35 @@ func FromTlsConnectionState(state *tls.ConnectionState) *SSLResponse {
 	}
 
 	return sslResponse
+}
+
+// stringifyExtensions 将扩展ID列表转换为字符串列表
+func stringifyExtensions(extensions []uint16) []string {
+	var result []string
+	for _, ext := range extensions {
+		result = append(result, strconv.Itoa(int(ext)))
+	}
+	return result
+}
+
+// containsExtension 检查扩展列表是否包含指定的扩展ID
+func containsExtension(extensions []uint16, target uint16) bool {
+	for _, ext := range extensions {
+		if ext == target {
+			return true
+		}
+	}
+	return false
+}
+
+// sortExtensions 对扩展ID列表进行排序
+func sortExtensions(extensions []uint16) {
+	// 简单的冒泡排序
+	for i := 0; i < len(extensions); i++ {
+		for j := i + 1; j < len(extensions); j++ {
+			if extensions[i] > extensions[j] {
+				extensions[i], extensions[j] = extensions[j], extensions[i]
+			}
+		}
+	}
 }

@@ -367,6 +367,7 @@ func ParseCertificatesFromServerHello(response []byte) (*types.SSLResponse, erro
 	sslResponse := &types.SSLResponse{
 		TLSVersion:  tlsInfo.TLSVersion,
 		CipherSuite: tlsInfo.CipherSuite,
+		JA3S:        tlsInfo.JA3S,
 	}
 	if len(tlsInfo.Certificates) == 0 {
 		return nil, errors.New("没有发现证书")

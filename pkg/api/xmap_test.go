@@ -17,6 +17,15 @@ import (
 	"github.com/tongchengbin/xmap/pkg/types"
 )
 
+func createXmap() *XMap {
+	opts := types.DefaultOptions()
+	xmap, err := New(opts)
+	if err != nil {
+		panic(err)
+	}
+	return xmap
+}
+
 // TestProtocolDetection 测试协议检测功能
 func TestProtocolDetection(t *testing.T) {
 	// 创建测试用例
@@ -410,4 +419,12 @@ func BenchmarkNewXmap(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_, _ = New(types.DefaultOptions())
 	}
+}
+
+func TestParseCertificateMessage(t *testing.T) {
+	// 测试证书解析
+	xmap := createXmap()
+	result, err := xmap.Scan(context.Background(), types.NewTarget("pc.test.pinbayun.com:443"))
+	assert.Nil(t, err)
+	println(result.Certificate)
 }
