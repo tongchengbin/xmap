@@ -82,3 +82,23 @@ func TestParseSendData(t *testing.T) {
 		})
 	}
 }
+
+func TestParseRegexPattern(t *testing.T) {
+	// 测试regex 解析是否正确
+	testCases := []struct {
+		raw    string
+		except string
+	}{
+		{
+			raw:    "^\x15\x03\x01\\0\x02\x02\x0a$",
+			except: "^\\x15\\x03\\x01\\\\0\\x02\\x02\\x0a$",
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.raw, func(t *testing.T) {
+			except := parseRegexPattern(tc.raw)
+			assert.Equal(t, tc.except, except)
+		})
+	}
+
+}
