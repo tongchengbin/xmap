@@ -116,6 +116,8 @@ func (ps *Store) AddProbe(probe *Probe) {
 	defer ps.mutex.Unlock()
 	// 使用协议/名称作为键
 	key := probe.Protocol + "/" + probe.Name
+	// 考虑有些跨协议匹配
+	ps.ProbesByName[probe.Name] = probe
 	ps.ProbesByName[key] = probe
 	if probe.Protocol == TCP {
 		ps.TCPProbes = append(ps.TCPProbes, probe)
@@ -142,7 +144,7 @@ func (ps *Store) SetFallbackProbes() error {
 			// 预分配容量以提高性能
 			probe.FallbackProbes = make([]*Probe, 0, len(probe.Fallback))
 			for _, fallbackName := range probe.Fallback {
-				// 尝试使用协议/名称格式查找
+				// 尝试使用协议/名称格式查找 支持跨协议匹配
 				fallbackKey := probe.Protocol + "/" + fallbackName
 				fallbackProbe, ok := allProbes[fallbackKey]
 				// 如果找不到，尝试直接使用名称查找

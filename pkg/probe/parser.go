@@ -3,13 +3,53 @@ package probe
 import (
 	"bufio"
 	"fmt"
+	"github.com/dlclark/regexp2"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/projectdiscovery/gologger"
 )
+
+// isHexDigit 检查字符是否为十六进制数字 (0-9, a-f, A-F)
+func isHexDigit(c byte) bool {
+	return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+}
+
+// hexToInt 将十六进制字符转换为整数值
+func hexToInt(c byte) int {
+	if c >= '0' && c <= '9' {
+		return int(c - '0')
+	}
+	if c >= 'a' && c <= 'f' {
+		return int(c - 'a' + 10)
+	}
+	if c >= 'A' && c <= 'F' {
+		return int(c - 'A' + 10)
+	}
+	return 0
+}
+
+// getPatternRegexp 编译正则表达式模式，并添加超时保护
+func getPatternRegexp(pattern string, opt string) (*regexp2.Regexp, error) {
+	var o regexp2.RegexOptions
+	switch opt {
+	case "i":
+		o = regexp2.IgnoreCase
+	case "s":
+		o = regexp2.Singleline
+	default:
+		o = regexp2.None
+	}
+	// 编译正则表达式
+	re, err := regexp2.Compile(pattern, o)
+	if err != nil {
+		return nil, err
+	}
+	return re, nil
+}
 
 // ParseProbes 解析探针文件内容并添加到指定的探针存储中
 func ParseProbes(content string) ([]*Probe, error) {
@@ -221,7 +261,8 @@ func parseFallbackProbe(probe *Probe, line string) {
 		return
 	}
 
-	probe.Fallback = append(probe.Fallback, parts[1])
+	// 设置回退探针名称
+	probe.Fallback = append(probe.Fallback, strings.Split(parts[1], ",")...)
 }
 
 // parseMatchRule 解析匹配规则
@@ -235,12 +276,8 @@ func parseMatchRule(probe *Probe, line string, lineIndex int) {
 
 	// 示例: match http m|^HTTP/1\.[01] \d\d\d|
 	// 或: softmatch http m|^HTTP/1\.[01] \d\d\d|
-	var parts []string
-	if soft {
-		parts = strings.SplitN(line, " ", 3)
-	} else {
-		parts = strings.SplitN(line, " ", 3)
-	}
+	// 或带自定义分隔符: match http m#^HTTP/1\.[01] \d\d\d#
+	parts := strings.SplitN(line, " ", 3)
 
 	if len(parts) < 3 {
 		gologger.Warning().Msgf("无效的匹配规则格式: %s", line)
@@ -255,41 +292,75 @@ func parseMatchRule(probe *Probe, line string, lineIndex int) {
 	patternType := ""
 	var pattern string
 
-	// 检查模式前缀：m|（普通匹配）、i|（不区分大小写）、s|（单行模式）
-	if strings.HasPrefix(patternPart, "m|") || strings.HasPrefix(patternPart, "i|") || strings.HasPrefix(patternPart, "s|") {
+	// 检查模式前缀：m、i、s等
+	if len(patternPart) >= 2 && (patternPart[0] == 'm' || patternPart[0] == 'i' || patternPart[0] == 's') {
 		patternType = patternPart[0:1]
-		mStart := 1
-		if patternPart[mStart] != '|' {
-			gologger.Warning().Msgf("无效的模式格式: %s", patternPart)
+
+		// 获取分隔符
+		delimiter := patternPart[1:2]
+		if len(patternPart) < 3 {
+			gologger.Warning().Msgf("无效的模式格式，缺少内容: %s", patternPart)
 			return
 		}
 
-		// 寻找模式结束的分隔符
-		// 模式部分应该是第一个 '|' 和第二个 '|' 之间的内容
-		// 而不是整行中的最后一个 '|'
-		patternStr := patternPart[mStart+1:]
-		end := strings.Index(patternStr, "|")
+		// 提取模式内容
+		patternContent := patternPart[2:]
+
+		// 查找结束分隔符，注意这里需要处理转义情况
+		end := -1
+		escaped := false
+		for i := 0; i < len(patternContent); i++ {
+			if escaped {
+				escaped = false
+				continue
+			}
+
+			if patternContent[i] == '\\' {
+				escaped = true
+				continue
+			}
+
+			if string(patternContent[i]) == delimiter {
+				end = i
+				break
+			}
+		}
+
 		if end == -1 {
-			gologger.Warning().Msgf("无效的模式格式，缺少结束分隔符: %s", patternPart)
+			gologger.Warning().Msgf("无效的模式格式，缺少结束分隔符 %s: %s", delimiter, patternPart)
 			return
 		}
-		pattern = patternStr[:end]
+
+		pattern = patternContent[:end]
+
+		// 检查是否有额外的标志
+		flags := ""
+		if end+1 < len(patternContent) {
+			flags = patternContent[end+1:]
+			// 处理标志，如 i（不区分大小写）、s（单行模式）等
+			if strings.Contains(flags, "i") {
+				patternType = "i"
+			} else if strings.Contains(flags, "s") {
+				patternType = "s"
+			}
+		}
 	} else {
 		gologger.Warning().Msgf("不支持的模式类型: %s", patternPart)
 		return
 	}
-	decodePattern := parseRegexPattern(pattern)
+
+	// 解析正则表达式模式
+	decodePattern := ParseRegexPattern(pattern)
 	match := &Match{
 		Line:    lineIndex,
 		Soft:    soft,
 		Service: FixProtocol(serviceName),
-		Pattern: []byte(decodePattern),
+		Pattern: decodePattern,
 	}
-	// 编译正则表达式
 	var err error
 	match.regex, err = getPatternRegexp(decodePattern, patternType)
 	if err != nil {
-		gologger.Warning().Msgf("编译正则表达式失败: %s - %v", pattern, err)
+		gologger.Warning().Msgf("编译正则表达式失败: line: %d > %s - %v", lineIndex, pattern, err)
 		return
 	}
 
@@ -348,6 +419,23 @@ func parseVersionInfo(line string) *VersionInfo {
 	dMatch := regexp.MustCompile(`d/([^/]*)/`).FindStringSubmatch(versionPart)
 	if len(dMatch) > 1 {
 		info.DeviceType = dMatch[1]
+	}
+
+	// 解析CPE标识符
+	cpeMatches := regexp.MustCompile(`cpe:/[^/]+/([^/]+/[^/]+(?:/[^/]+)*)/`).FindAllStringSubmatch(versionPart, -1)
+	if len(cpeMatches) > 0 {
+		info.CPE = make([]string, 0, len(cpeMatches))
+		for _, cpeMatch := range cpeMatches {
+			if len(cpeMatch) > 1 {
+				// 完整的CPE字符串
+				fullCPE := "cpe:/" + cpeMatch[0]
+				// 去掉末尾的斜杠
+				if strings.HasSuffix(fullCPE, "/") {
+					fullCPE = fullCPE[:len(fullCPE)-1]
+				}
+				info.CPE = append(info.CPE, fullCPE)
+			}
+		}
 	}
 
 	return info
@@ -410,6 +498,14 @@ func parseEscapedString(s string) string {
 			case '0':
 				// 处理 \0 转义序列 (空字节)
 				result.WriteByte(0)
+			case 'a':
+				result.WriteByte('\a') // 警报 (BEL)
+			case 'b':
+				result.WriteByte('\b') // 退格
+			case 'f':
+				result.WriteByte('\f') // 换页
+			case 'v':
+				result.WriteByte('\v') // 垂直制表符
 			case 'x':
 				// 十六进制转义序列 \xHH
 				if i+2 < len(s) {
@@ -420,11 +516,32 @@ func parseEscapedString(s string) string {
 						i += 2 // 跳过已处理的两位十六进制数字
 					} else {
 						// 如果解析失败，保留原字符
+						result.WriteByte('\\')
 						result.WriteByte('x')
 					}
 				} else {
-					// 不完整的十六进制序列，保留原字符
+					// 不完整的十六进制序列，保留原始转义
+					result.WriteByte('\\')
 					result.WriteByte('x')
+				}
+			case 'u':
+				// Unicode转义序列 \uHHHH
+				if i+4 < len(s) {
+					hexStr := s[i+1 : i+5]
+					val, err := strconv.ParseUint(hexStr, 16, 16)
+					if err == nil {
+						// 写入UTF-8编码的Unicode字符
+						result.WriteRune(rune(val))
+						i += 4 // 跳过已处理的四位十六进制数字
+					} else {
+						// 如果解析失败，保留原始转义
+						result.WriteByte('\\')
+						result.WriteByte('u')
+					}
+				} else {
+					// 不完整的Unicode序列，保留原始转义
+					result.WriteByte('\\')
+					result.WriteByte('u')
 				}
 			default:
 				// 对于其他转义序列，保留原始的反斜杠和字符
@@ -442,9 +559,237 @@ func parseEscapedString(s string) string {
 	return result.String()
 }
 
-// parseRegexPattern 解析正则表达式模式
-func parseRegexPattern(pattern string) string {
-	// 首先对Regex 中的特殊字符进行转义
-	pattern = strings.ReplaceAll(pattern, "\\x7c", "\\\\|")
-	return parseEscapedString(pattern)
+// FixProtocol 标准化协议名称
+func FixProtocol(oldProtocol string) string {
+	//进行最后输出修饰
+	if oldProtocol == "ssl/http" {
+		return "https"
+	}
+	if oldProtocol == "http-proxy" {
+		return "http"
+	}
+	if oldProtocol == "microsoft-ds" {
+		return "smb"
+	}
+	if oldProtocol == "netbios-ssn" {
+		return "netbios"
+	}
+	if oldProtocol == "oracle-tns" {
+		return "oracle"
+	}
+	if oldProtocol == "msrpc" {
+		return "rpc"
+	}
+	if oldProtocol == "ms-sql-s" {
+		return "mssql"
+	}
+	if oldProtocol == "domain" {
+		return "dns"
+	}
+	if oldProtocol == "svnserve" {
+		return "svn"
+	}
+	if oldProtocol == "ibm-db2" {
+		return "db2"
+	}
+	if oldProtocol == "socks-proxy" {
+		return "socks5"
+	}
+	if len(oldProtocol) > 4 {
+		if oldProtocol[:4] == "ssl/" {
+			return oldProtocol[4:] + "-ssl"
+		}
+	}
+	oldProtocol = strings.ReplaceAll(oldProtocol, "_", "-")
+	return oldProtocol
+}
+
+// TemplateProcessor 处理版本信息模板替换
+type TemplateProcessor struct {
+	// 正则表达式匹配结果中的组
+	groups map[string]string
+}
+
+// NewTemplateProcessor 创建一个新的模板处理器
+func NewTemplateProcessor(groups map[string]string) *TemplateProcessor {
+	return &TemplateProcessor{
+		groups: groups,
+	}
+}
+
+// ProcessTemplate 处理模板字符串，替换其中的变量
+func (p *TemplateProcessor) ProcessTemplate(template string) string {
+	// 如果模板为空，返回空字符串
+	if template == "" {
+		return ""
+	}
+
+	// 处理模板中的变量替换
+	return p.processTemplate(template)
+}
+
+// processTemplate 处理模板字符串中的变量替换
+func (p *TemplateProcessor) processTemplate(template string) string {
+	result := template
+
+	// 替换 $1, $2 等数字变量
+	for i := 1; i <= 9; i++ {
+		key := fmt.Sprintf("%d", i)
+		if value, ok := p.groups[key]; ok {
+			placeholder := fmt.Sprintf("$%s", key)
+			result = strings.ReplaceAll(result, placeholder, value)
+		}
+	}
+
+	// 替换 ${name} 形式的命名变量
+	for key, value := range p.groups {
+		placeholder := fmt.Sprintf("${%s}", key)
+		result = strings.ReplaceAll(result, placeholder, value)
+	}
+
+	// 处理特殊命令，如 $P(), $I() 等
+	result = p.processCommands(result)
+
+	return result
+}
+
+// processCommands 处理模板中的特殊命令
+func (p *TemplateProcessor) processCommands(template string) string {
+	result := template
+
+	// 处理 $P(n) 命令 - 提取端口号
+	result = p.processPortCommand(result)
+
+	// 处理 $I(n) 命令 - 提取IP地址
+	result = p.processIPCommand(result)
+
+	// 处理其他可能的命令
+	// ...
+
+	return result
+}
+
+// processPortCommand 处理 $P(n) 命令，提取端口号
+func (p *TemplateProcessor) processPortCommand(template string) string {
+	// 简单实现，实际应根据需求扩展
+	for i := 1; i <= 9; i++ {
+		cmd := fmt.Sprintf("$P(%d)", i)
+		if strings.Contains(template, cmd) {
+			if value, ok := p.groups[fmt.Sprintf("%d", i)]; ok {
+				// 尝试从值中提取端口号
+				// 这里是简化实现，实际可能需要更复杂的逻辑
+				template = strings.ReplaceAll(template, cmd, value)
+			}
+		}
+	}
+	return template
+}
+
+// processIPCommand 处理 $I(n) 命令，提取IP地址
+func (p *TemplateProcessor) processIPCommand(template string) string {
+	// 简单实现，实际应根据需求扩展
+	for i := 1; i <= 9; i++ {
+		cmd := fmt.Sprintf("$I(%d)", i)
+		if strings.Contains(template, cmd) {
+			if value, ok := p.groups[fmt.Sprintf("%d", i)]; ok {
+				// 尝试从值中提取IP地址
+				// 这里是简化实现，实际可能需要更复杂的逻辑
+				template = strings.ReplaceAll(template, cmd, value)
+			}
+		}
+	}
+	return template
+}
+
+// isRegexKey 判断是否是正则表达式关键字、根据结果判断是否需要转义
+func isRegexKey(key string) bool {
+	chars := []string{".", "*", "+", "?", "[", "]", "(", ")", "{", "\\"}
+	for _, char := range chars {
+		if strings.Contains(key, char) {
+			return true
+		}
+	}
+	return false
+}
+
+func RegexStringUnescape(s string) string {
+	if s == "" {
+		return ""
+	}
+	var result strings.Builder
+	result.Grow(len(s)) // 预分配空间
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\\' && i+1 < len(s) {
+			i++ // 跳过反斜杠
+			switch s[i] {
+			case '0': // \0 - 空字符
+				result.WriteByte(0)
+			case 'a': // \a - 响铃 (BEL)
+				result.WriteByte('\a')
+			case 'b': // \b - 退格 (BS)
+				result.WriteByte('\b')
+			case 'f': // \f - 换页 (FF)
+				result.WriteByte('\f')
+			case 'n': // \n - 换行 (LF)
+				result.WriteByte('\n')
+			case 'r': // \r - 回车 (CR)
+				result.WriteByte('\r')
+			case 't': // \t - 水平制表符 (TAB)
+				result.WriteByte('\t')
+			case 'v': // \v - 垂直制表符 (VT)
+				result.WriteByte('\v')
+			case 'x': // \xHH - 十六进制转义序列
+				if i+2 < len(s) {
+					ch1 := s[i+1]
+					ch2 := s[i+2]
+					if isHexDigit(ch1) && isHexDigit(ch2) {
+						// 将两个十六进制字符转换为一个字节
+						val := hexToInt(ch1)*16 + hexToInt(ch2)
+						// 检查解析出的字符是否是正则表达式中的特殊字符
+						ch := byte(val)
+						if isRegexKey(string(ch)) {
+							// 如果是特殊字符，添加转义
+							result.WriteByte('\\')
+						}
+						result.WriteByte(ch)
+						i += 2 // 跳过这两个十六进制字符
+					} else {
+						// 如果不是有效的十六进制序列，保留原始的 \x
+						result.WriteByte('\\')
+						result.WriteByte('x')
+					}
+				} else {
+					// 如果 \x 后面没有足够的字符，保留原始的 \x
+					result.WriteByte('\\')
+					result.WriteByte('x')
+				}
+			case '\\':
+				result.WriteByte('\\')
+				result.WriteByte('\\')
+			default:
+				// 检查是否是正则表达式中的特殊字符
+				if isRegexKey(string(s[i])) {
+					// 保留转义，因为这些在正则表达式中是特殊字符
+					result.WriteByte('\\')
+					result.WriteByte(s[i])
+				} else if unicode.IsLetter(rune(s[i])) || unicode.IsDigit(rune(s[i])) {
+					// 与 Nmap 保持一致，不支持八进制转义序列和其他字母数字转义
+					// 返回原始字符
+					result.WriteByte(s[i])
+				} else {
+					// 对于其他字符，只保留字符本身
+					result.WriteByte(s[i])
+				}
+			}
+		} else {
+			result.WriteByte(s[i])
+		}
+	}
+	return result.String()
+}
+
+// ParseRegexPattern 转换正则表达式
+func ParseRegexPattern(pattern string) string {
+	s := RegexStringUnescape(pattern)
+	return s
 }
