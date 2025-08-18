@@ -43,7 +43,7 @@ func ParseOptions() (*types.Options, error) {
 		flagSet.IntVarP(&options.Threads, "threads", "c", 64, "最大并行扫描数"),
 		flagSet.BoolVarP(&options.FastMode, "fast", "f", false, "使用快速模式"),
 		flagSet.BoolVar(&options.UseAllProbes, "all-probes", false, "使用所有探针"),
-		flagSet.StringSliceVarP(&options.NmapProneName, "probes", "np", goflags.StringSlice{}, "要使用的探针名称，逗号分隔", goflags.Options{}),
+		flagSet.StringVarP(&options.NmapProneName, "probes", "np", "", "要使用的探针名称"),
 		flagSet.BoolVar(&options.UseSSL, "ssl", false, "使用SSL"),
 		flagSet.IntVar(&options.VersionIntensity, "version-intensity", 7, "版本检测强度(0-9)"),
 		flagSet.BoolVarP(&options.ServiceVersion, "service-version", "sv", true, "显示服务版本"),

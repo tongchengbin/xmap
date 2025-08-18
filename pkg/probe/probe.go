@@ -1,9 +1,8 @@
 package probe
 
 import (
+	"context"
 	"fmt"
-	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -11,51 +10,8 @@ import (
 	"github.com/projectdiscovery/gologger"
 )
 
-var DefaultRegexpTimeout = 3 * time.Second
-
-// Probe 表示一个服务探针
-type Probe struct {
-	// 探针名称
-	Name string
-	// 探针适用的默认端口
-	Ports []int
-	// 探针适用的SSL端口
-	SSLPorts []int
-	// 探针总等待时间
-	TotalWaitMS time.Duration
-	// TCP包装等待时间
-	TCPWrappedMS time.Duration
-	// 探针稀有度（值越小优先级越高）
-	Rarity int
-	// 使用字符串表示协议类型
-	Protocol string
-	// 探针发送数据
-	SendData []byte
-	// 匹配组
-	MatchGroup []*Match
-	// 回退探针名称
-	Fallback []string
-	// 回退探针引用
-	FallbackProbes []*Probe
-	// 探针的匹配超时时间
-	MatchTimeout time.Duration
-}
-
-// Match 表示匹配规则
-type Match struct {
-	// 是否为软匹配
-	Soft bool
-	// 服务名称
-	Service string
-	// 匹配模式
-	Pattern []byte
-	// 编译好的正则表达式
-	regex *regexp2.Regexp
-	// 版本信息
-	VersionInfo *VersionInfo
-	// 行号
-	Line int
-}
+// DefaultRegexpTimeout 默认正则表达式匹配超时时间，防止灾难性回溯
+const DefaultRegexpTimeout = 500 * time.Millisecond
 
 // HasPort 检查探针是否适用于指定端口
 func (p *Probe) HasPort(port int) bool {
@@ -78,23 +34,41 @@ func (p *Probe) HasSSLPort(port int) bool {
 }
 
 // matchWithTimeout 在指定超时时间内执行正则表达式匹配
+// 结合正则表达式内置超时和goroutine超时双重保护
 func matchWithTimeout(regex *regexp2.Regexp, input string) (*regexp2.Match, error) {
 	type matchResult struct {
 		match *regexp2.Match
 		err   error
 	}
+
+	// 创建可取消的上下文
+	ctx, cancel := context.WithTimeout(context.Background(), DefaultRegexpTimeout)
+	defer cancel()
+
 	resultCh := make(chan matchResult, 1)
+
 	// 在goroutine中执行匹配操作
 	go func() {
+		// 尝试匹配，正则表达式库内部会处理其MatchTimeout超时
 		match, err := regex.FindStringMatch(input)
-		resultCh <- matchResult{match: match, err: err}
+
+		// 检查上下文是否已取消或超时
+		select {
+		case <-ctx.Done():
+			// 上下文已取消，不发送结果
+			return
+		default:
+			// 上下文未取消，发送结果
+			resultCh <- matchResult{match: match, err: err}
+		}
 	}()
 
 	// 等待匹配结果或超时
 	select {
 	case result := <-resultCh:
 		return result.match, result.err
-	case <-time.After(DefaultRegexpTimeout):
+	case <-ctx.Done():
+		// 外部超时或取消
 		return nil, fmt.Errorf("正则表达式匹配超时 (超过 %v)", DefaultRegexpTimeout)
 	}
 }
@@ -142,24 +116,13 @@ func extractVersionInfo(m *Match, groups map[string]string) map[string]interface
 		}
 
 		if strings.Contains(vStr, "$") {
-			// 提取所有的$N引用
-			varPattern := regexp.MustCompile(`\$(\d+|[a-zA-Z][a-zA-Z0-9_]*)`)
-			// 替换所有的$N引用为相应的组值
-			replacedValue := varPattern.ReplaceAllStringFunc(vStr, func(match string) string {
-				groupKey := match[1:] // 去掉$前缀
-				// 如果是数字，直接从groups中获取
-				if _, err := strconv.Atoi(groupKey); err == nil {
-					if groupValue, ok := groups["$"+groupKey]; ok {
-						return groupValue
-					}
-					return ""
-				}
-				// 否则使用命名组
-				if groupValue, ok := groups[groupKey]; ok {
-					return groupValue
-				}
-				return "" // 如果没有找到对应的组，返回空字符串
-			})
+			if groups[k] != "" {
+				extra[k] = groups[k]
+				continue
+			}
+			replacedValue := strings.ReplaceAll(vStr, "$", "")
+			replacedValue = strings.ReplaceAll(replacedValue, "{", "")
+			replacedValue = strings.ReplaceAll(replacedValue, "}", "")
 			extra[k] = replacedValue
 		}
 	}
