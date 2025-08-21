@@ -152,7 +152,7 @@ type ScanResult struct {
 	// 服务名称
 	Service string `json:"service"`
 	// 是否使用SSL
-	SSL bool `json:"ssl"`
+	SSL bool `json:"ssl,omitempty"`
 	// 证书信息
 	Certificate *SSLResponse `json:"certificate,omitempty"`
 	// 附加信息
@@ -165,7 +165,7 @@ type ScanResult struct {
 	// 扫描耗时
 	Duration float64 `json:"duration"`
 	// 错误信息
-	Error error
+	Error error `json:"error"`
 	// 扫描状态
 	Status    ScanStatus `json:"status"`
 	startTime time.Time
