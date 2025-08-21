@@ -293,19 +293,16 @@ func parseMatchRule(probe *Probe, line string, lineIndex int) {
 	var pattern string
 
 	// 检查模式前缀：m、i、s等
-	if len(patternPart) >= 2 && (patternPart[0] == 'm' || patternPart[0] == 'i' || patternPart[0] == 's') {
-		patternType = patternPart[0:1]
-
-		// 获取分隔符
-		delimiter := patternPart[1:2]
+	if len(patternPart) >= 2 && (patternPart[0] == 'm') {
+		// 分隔符
 		if len(patternPart) < 3 {
 			gologger.Warning().Msgf("无效的模式格式，缺少内容: %s", patternPart)
 			return
 		}
-
+		delimiter := patternPart[1:2]
+		patternType = patternPart[0:1]
 		// 提取模式内容
 		patternContent := patternPart[2:]
-
 		// 查找结束分隔符，注意这里需要处理转义情况
 		end := -1
 		escaped := false
@@ -314,25 +311,20 @@ func parseMatchRule(probe *Probe, line string, lineIndex int) {
 				escaped = false
 				continue
 			}
-
 			if patternContent[i] == '\\' {
 				escaped = true
 				continue
 			}
-
 			if string(patternContent[i]) == delimiter {
 				end = i
 				break
 			}
 		}
-
 		if end == -1 {
 			gologger.Warning().Msgf("无效的模式格式，缺少结束分隔符 %s: %s", delimiter, patternPart)
 			return
 		}
-
 		pattern = patternContent[:end]
-
 		// 检查是否有额外的标志
 		flags := ""
 		if end+1 < len(patternContent) {
@@ -363,7 +355,6 @@ func parseMatchRule(probe *Probe, line string, lineIndex int) {
 		gologger.Warning().Msgf("编译正则表达式失败: line: %d > %s - %v", lineIndex, pattern, err)
 		return
 	}
-
 	// 解析版本信息
 	match.VersionInfo = parseVersionInfo(line)
 
@@ -703,7 +694,7 @@ func (p *TemplateProcessor) processIPCommand(template string) string {
 
 // isRegexKey 判断是否是正则表达式关键字、根据结果判断是否需要转义
 func isRegexKey(key string) bool {
-	chars := []string{".", "*", "+", "?", "[", "]", "(", ")", "{", "\\"}
+	chars := []string{".", "*", "+", "?", "[", "]", "(", ")", "{", "\\", "|"}
 	for _, char := range chars {
 		if strings.Contains(key, char) {
 			return true
@@ -763,6 +754,10 @@ func RegexStringUnescape(s string) string {
 					result.WriteByte('\\')
 					result.WriteByte('x')
 				}
+			case 'd', 'w', 's', 'D', 'W', 'S':
+				result.WriteByte('\\')
+				result.WriteByte(s[i])
+
 			case '\\':
 				result.WriteByte('\\')
 				result.WriteByte('\\')

@@ -51,14 +51,8 @@ func (s *ServiceScanner) Scan(target *types.ScanTarget) (*types.ScanResult, erro
 func (s *ServiceScanner) ScanWithContext(ctx context.Context, target *types.ScanTarget) (*types.ScanResult, error) {
 	// 创建扫描结果
 	result := types.NewScanResult(target)
-	// 选择适用的探针
-	var probes []*probe.Probe
-	if target.Protocol == "tcp" {
-		probes = s.probeStore.GetTCPProbes()
-	} else {
-		probes = s.probeStore.GetUDPProbes()
-	}
-	// sort probes by rarity
+	// 对探针进行排序，优先使用适合当前端口的探针
+	probes := s.probeStore.GetProbeForPort(target.Protocol, target.Port, false)
 	if len(probes) == 0 {
 		err := errors.New("no suitable probes found for target")
 		result.Complete(err)
@@ -71,8 +65,7 @@ func (s *ServiceScanner) ScanWithContext(ctx context.Context, target *types.Scan
 		ctx, cancel = context.WithTimeout(ctx, time.Duration(s.options.MaxTimeout)*time.Second)
 		defer cancel()
 	}
-	// 对探针进行排序，优先使用适合当前端口的探针
-	probes = sortProbes(probes, target.Port, false)
+
 	// 执行扫描
 	err := s.executeProbes(ctx, target, probes, false, result)
 	if result.Service == "ssl" {
@@ -81,7 +74,7 @@ func (s *ServiceScanner) ScanWithContext(ctx context.Context, target *types.Scan
 			result.Certificate = certInfo
 			gologger.Debug().Msgf("parse certificates from server hello success: %v", certInfo)
 		}
-		probes = sortProbes(probes, target.Port, true)
+		probes = s.probeStore.GetProbeForPort(target.Protocol, target.Port, true)
 		err = s.executeProbes(ctx, target, probes, true, result)
 		if err != nil {
 			gologger.Debug().Msgf("SSL scan failed: %v", err)
@@ -193,6 +186,7 @@ func (s *ServiceScanner) executeTCPProbes(ctx context.Context, target *types.Sca
 			}
 			// 如果匹配成功
 			if matchResult != nil {
+				println(matchResult.Match.Line)
 				if useSSL {
 					gologger.Debug().Msgf("Matched probe %s on (ssl)%s://%s:%d", pb.Name, matchResult.Match.Service, target.IP, target.Port)
 				} else {

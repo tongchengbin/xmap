@@ -33,6 +33,38 @@ func (p *Probe) HasSSLPort(port int) bool {
 	return false
 }
 
+// HasExactPort 检查探针是否精确匹配指定端口（单独列出而非端口范围）
+func (p *Probe) HasExactPort(port int) bool {
+	// 如果探针没有指定端口，则认为不是精确匹配
+	if len(p.Ports) == 0 {
+		return false
+	}
+
+	// 检查是否精确匹配端口
+	for _, p := range p.Ports {
+		if p == port {
+			return true
+		}
+	}
+	return false
+}
+
+// HasExactSSLPort 检查探针是否精确匹配SSL端口（单独列出而非端口范围）
+func (p *Probe) HasExactSSLPort(port int) bool {
+	// 如果探针没有指定SSL端口，则认为不是精确匹配
+	if len(p.SSLPorts) == 0 {
+		return false
+	}
+
+	// 检查是否精确匹配SSL端口
+	for _, sslPort := range p.SSLPorts {
+		if sslPort == port {
+			return true
+		}
+	}
+	return false
+}
+
 // matchWithTimeout 在指定超时时间内执行正则表达式匹配
 // 结合正则表达式内置超时和goroutine超时双重保护
 func matchWithTimeout(regex *regexp2.Regexp, input string) (*regexp2.Match, error) {

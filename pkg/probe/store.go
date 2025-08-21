@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 
 	"github.com/projectdiscovery/gologger"
@@ -319,10 +320,11 @@ func (ps *Store) Clear() {
 	ps.UDPProbes = make([]*Probe, 0)
 }
 
-// GetProbeForPort 获取适用于指定端口的探针列表
+// GetProbeForPort 获取适用于指定端口的探针列表，先按端口精确匹配度排序，再按稀有度排序
 func (ps *Store) GetProbeForPort(protocol string, port int, ssl bool) []*Probe {
 	ps.mutex.RLock()
 	defer ps.mutex.RUnlock()
+
 	var probes []*Probe
 	if protocol == TCP {
 		probes = ps.TCPProbes
@@ -331,17 +333,52 @@ func (ps *Store) GetProbeForPort(protocol string, port int, ssl bool) []*Probe {
 	} else {
 		return nil
 	}
-	result := make([]*Probe, 0)
+	// 使用二维数组分类探针：[0]精确匹配端口的探针，[1]范围匹配 端口的探针，[2]其他
+	classifiedProbes := make([][]*Probe, 3)
+	classifiedProbes[0] = make([]*Probe, 0) // 精准匹配
+	classifiedProbes[1] = make([]*Probe, 0) // 范围匹配
+	classifiedProbes[2] = make([]*Probe, 0) // 其他
+	// 移除调试语句
 	for _, probe := range probes {
 		if ssl {
-			if probe.HasSSLPort(port) {
-				result = append(result, probe)
+			if probe.HasExactSSLPort(port) {
+				// 精确匹配 SSL 端口
+				classifiedProbes[0] = append(classifiedProbes[0], probe)
+			} else if probe.HasSSLPort(port) {
+				// 通过端口范围匹配
+				classifiedProbes[1] = append(classifiedProbes[1], probe)
+			} else {
+				classifiedProbes[2] = append(classifiedProbes[2], probe)
 			}
 		} else {
-			if probe.HasPort(port) {
-				result = append(result, probe)
+			if probe.HasExactPort(port) {
+				// 精确匹配普通端口
+				classifiedProbes[0] = append(classifiedProbes[0], probe)
+			} else if probe.HasPort(port) {
+				// 通过端口范围匹配
+				classifiedProbes[1] = append(classifiedProbes[1], probe)
+			} else {
+				classifiedProbes[2] = append(classifiedProbes[2], probe)
 			}
 		}
 	}
+	// 分别按稀有度排序
+	for i := 0; i < len(classifiedProbes); i++ {
+		sort.Slice(classifiedProbes[i], func(j, k int) bool {
+			return classifiedProbes[i][j].Rarity < classifiedProbes[i][k].Rarity
+		})
+	}
+	// 返回所有探针，按照优先级排序：精确匹配 > 范围匹配 > 其他
+	totalLen := len(classifiedProbes[0]) + len(classifiedProbes[1]) + len(classifiedProbes[2])
+	result := make([]*Probe, 0, totalLen)
+
+	// 先添加精确匹配的探针
+	result = append(result, classifiedProbes[0]...)
+
+	// 再添加范围匹配的探针
+	result = append(result, classifiedProbes[1]...)
+
+	// 最后添加其他探针
+	result = append(result, classifiedProbes[2]...)
 	return result
 }
