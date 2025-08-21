@@ -186,7 +186,6 @@ func (s *ServiceScanner) executeTCPProbes(ctx context.Context, target *types.Sca
 			}
 			// 如果匹配成功
 			if matchResult != nil {
-				println(matchResult.Match.Line)
 				if useSSL {
 					gologger.Debug().Msgf("Matched probe %s on (ssl)%s://%s:%d", pb.Name, matchResult.Match.Service, target.IP, target.Port)
 				} else {
