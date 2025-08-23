@@ -27,14 +27,12 @@ func ParseOptions() (*types.Options, error) {
 	options.Banner = Banner
 	flagSet := goflags.NewFlagSet()
 	flagSet.SetDescription("XMap - 一个快速可靠的网络扫描和指纹识别工具")
-
 	// 创建目标参数组
 	flagSet.CreateGroup("目标", "目标设置",
 		flagSet.StringSliceVarP(&options.Target, "target", "t", goflags.StringSlice{}, "扫描目标，格式: ip:port 或 ip (使用默认端口)", goflags.Options{}),
 		flagSet.StringVarP(&options.TargetFile, "target-file", "l", "", "包含扫描目标的文件，每行一个目标"),
 		flagSet.StringVarP(&options.Ports, "ports", "p", "80,443,8080", "要扫描的端口，逗号分隔"),
 	)
-
 	// 创建扫描选项组
 	flagSet.CreateGroup("扫描", "扫描选项",
 		flagSet.IntVar(&options.Timeout, "timeout", 5, "扫描超时时间(秒)"),

@@ -16,6 +16,7 @@ type Options struct {
 	MaxTimeout       int
 	Timeout          int
 	Retries          int
+	HttpRetry        int
 	Threads          int
 	FastMode         bool
 	UseAllProbes     bool

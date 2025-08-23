@@ -24,6 +24,7 @@ func NewScanner(options *types.Options) (*Scanner, error) {
 		return nil, fmt.Errorf("规则库未加载")
 	}
 	crawlerOptions := crawl.DefaultOption()
+	crawlerOptions.RetryMax = options.HttpRetry
 	crawlerOptions.Proxy = options.Proxy
 	crawlerOptions.DebugResp = options.DebugResponse
 	crawlerOptions.DisableIcon = options.DisableIcon
