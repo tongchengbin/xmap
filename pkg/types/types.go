@@ -37,8 +37,6 @@ type ScanTarget struct {
 	Path     string `json:"path,omitempty"`     // URL路径
 	// 解析状态，不输出到JSON
 	Parsed bool `json:"-"`
-	// 状态检查器，用于跟踪连接状态，不输出到JSON
-	StatusCheck interface{} `json:"-"`
 	// TLS证书，不输出到JSON
 	TLSCertificates []*x509.Certificate `json:"-"`
 	// 证书信息，用于临时存储解析的证书数据
