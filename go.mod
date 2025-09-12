@@ -12,7 +12,7 @@ require (
 	github.com/projectdiscovery/gologger v1.1.46
 	github.com/remeh/sizedwaitgroup v1.0.0
 	github.com/stretchr/testify v1.10.0
-	github.com/tongchengbin/appfinger v1.6.11
+	github.com/tongchengbin/appfinger v1.6.12
 )
 
 require (
