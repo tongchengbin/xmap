@@ -3,10 +3,11 @@ package output
 import (
 	"bufio"
 	"fmt"
-	"github.com/logrusorgru/aurora"
 	"os"
 	"strings"
 	"sync"
+
+	"github.com/logrusorgru/aurora"
 
 	"github.com/projectdiscovery/gologger"
 
@@ -82,6 +83,10 @@ func (o *ConsoleOuter) Output(results *types.ScanResult) error {
 		componentsStr}
 	if title, ok := results.Banner["title"]; ok {
 		outputFields = append(outputFields, fmt.Sprintf("[%s]", aurora.Green(title)))
+	}
+	// 显示状态码
+	if statusCode, ok := results.Banner["status_code"]; ok {
+		outputFields = append(outputFields, fmt.Sprintf("[%d]", aurora.Yellow(statusCode)))
 	}
 	outputFields = append(outputFields, fmt.Sprintf("[%s]", aurora.Green(results.Duration).String()))
 	outputStr := strings.Join(outputFields, " ")
