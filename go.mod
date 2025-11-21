@@ -12,11 +12,7 @@ require (
 	github.com/projectdiscovery/gologger v1.1.46
 	github.com/remeh/sizedwaitgroup v1.0.0
 	github.com/stretchr/testify v1.10.0
-<<<<<<< HEAD
-	github.com/tongchengbin/appfinger v1.6.10
-=======
 	github.com/tongchengbin/appfinger v1.6.12
->>>>>>> cea0b916d59e8ee4f026f453271fbf6672e6cf7f
 )
 
 require (

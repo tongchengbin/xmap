@@ -233,14 +233,8 @@ github.com/tidwall/rtred v0.1.2 h1:exmoQtOLvDoO8ud++6LwVsAMTu0KPzLTUrMln8u1yu8=
 github.com/tidwall/rtred v0.1.2/go.mod h1:hd69WNXQ5RP9vHd7dqekAz+RIdtfBogmglkZSRxCHFQ=
 github.com/tidwall/tinyqueue v0.1.1 h1:SpNEvEggbpyN5DIReaJ2/1ndroY8iyEGxPYxoSaymYE=
 github.com/tidwall/tinyqueue v0.1.1/go.mod h1:O/QNHwrnjqr6IHItYrzoHAKYhBkLI67Q096fQP5zMYw=
-<<<<<<< HEAD
-github.com/tongchengbin/appfinger v1.6.9 h1:UY9ic4XTfXbttm13fhE/+l7vIBRj97TGkeGtn/JoUzk=
-github.com/tongchengbin/appfinger v1.6.9/go.mod h1:m2V7wCIKDc4LBEY4lTrqxpQHLNplnRhOlfk4vgmerVg=
-github.com/tongchengbin/appfinger v1.6.10/go.mod h1:m2V7wCIKDc4LBEY4lTrqxpQHLNplnRhOlfk4vgmerVg=
-=======
 github.com/tongchengbin/appfinger v1.6.12 h1:l8/V4ir6yzw2r77L011+z+ZstbQsgFuG/JpTZpkNNcY=
 github.com/tongchengbin/appfinger v1.6.12/go.mod h1:m2V7wCIKDc4LBEY4lTrqxpQHLNplnRhOlfk4vgmerVg=
->>>>>>> cea0b916d59e8ee4f026f453271fbf6672e6cf7f
 github.com/ulikunitz/xz v0.5.8/go.mod h1:nbz6k7qbPmH4IRqmfOplQw/tblSgqTqBwxkY0oWt/14=
 github.com/ulikunitz/xz v0.5.9/go.mod h1:nbz6k7qbPmH4IRqmfOplQw/tblSgqTqBwxkY0oWt/14=
 github.com/ulikunitz/xz v0.5.11 h1:kpFauv27b6ynzBNT/Xy+1k+fK4WswhN/6PN5WhFAGw8=
