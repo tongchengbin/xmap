@@ -7,9 +7,7 @@ on:
 
 permissions:
   contents: write
-  packages: write
-  actions: read
-  security-events: write
+  discussions: write
 
 jobs:
   release:
@@ -61,7 +59,7 @@ jobs:
         sha256sum *.tar.gz *.zip > checksums.txt
 
     - name: Create Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       with:
         tag_name: ${{ steps.version.outputs.VERSION }}
         name: Release ${{ steps.version.outputs.VERSION }}
@@ -106,4 +104,4 @@ jobs:
           2. 解压到你的 PATH 目录
           3. 运行 `xmap -h` 验证安装
       env:
-        GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
