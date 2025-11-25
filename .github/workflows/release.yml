@@ -7,6 +7,9 @@ on:
 
 permissions:
   contents: write
+  packages: write
+  actions: read
+  security-events: write
 
 jobs:
   release:
@@ -103,4 +106,4 @@ jobs:
           2. 解压到你的 PATH 目录
           3. 运行 `xmap -h` 验证安装
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
