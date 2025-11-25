@@ -1,0 +1,106 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+
+    - name: Get version
+      id: version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+    - name: Build binaries
+      run: |
+        # Create dist directory
+        mkdir -p dist
+        
+        # Build for different platforms
+        GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o dist/xmap-linux-amd64 .
+        GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o dist/xmap-linux-arm64 .
+        GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o dist/xmap-darwin-amd64 .
+        GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o dist/xmap-darwin-arm64 .
+        GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o dist/xmap-windows-amd64.exe .
+        GOOS=windows GOARCH=arm64 go build -ldflags="-s -w" -o dist/xmap-windows-arm64.exe .
+
+    - name: Create archives
+      run: |
+        cd dist
+        
+        # Create tar.gz for Unix systems
+        tar -czf xmap-${{ steps.version.outputs.VERSION }}-linux-amd64.tar.gz xmap-linux-amd64
+        tar -czf xmap-${{ steps.version.outputs.VERSION }}-linux-arm64.tar.gz xmap-linux-arm64
+        tar -czf xmap-${{ steps.version.outputs.VERSION }}-darwin-amd64.tar.gz xmap-darwin-amd64
+        tar -czf xmap-${{ steps.version.outputs.VERSION }}-darwin-arm64.tar.gz xmap-darwin-arm64
+        
+        # Create zip for Windows
+        zip xmap-${{ steps.version.outputs.VERSION }}-windows-amd64.zip xmap-windows-amd64.exe
+        zip xmap-${{ steps.version.outputs.VERSION }}-windows-arm64.zip xmap-windows-arm64.exe
+
+    - name: Generate checksums
+      run: |
+        cd dist
+        sha256sum *.tar.gz *.zip > checksums.txt
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.version.outputs.VERSION }}
+        name: Release ${{ steps.version.outputs.VERSION }}
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+        files: |
+          dist/*.tar.gz
+          dist/*.zip
+          dist/checksums.txt
+        body: |
+          ## 🚀 xmap ${{ steps.version.outputs.VERSION }}
+          
+          ### 📦 下载
+          
+          选择适合你系统的版本:
+          
+          **Linux:**
+          - [xmap-${{ steps.version.outputs.VERSION }}-linux-amd64.tar.gz](https://github.com/tongchengbin/xmap/releases/download/${{ steps.version.outputs.VERSION }}/xmap-${{ steps.version.outputs.VERSION }}-linux-amd64.tar.gz)
+          - [xmap-${{ steps.version.outputs.VERSION }}-linux-arm64.tar.gz](https://github.com/tongchengbin/xmap/releases/download/${{ steps.version.outputs.VERSION }}/xmap-${{ steps.version.outputs.VERSION }}-linux-arm64.tar.gz)
+          
+          **macOS:**
+          - [xmap-${{ steps.version.outputs.VERSION }}-darwin-amd64.tar.gz](https://github.com/tongchengbin/xmap/releases/download/${{ steps.version.outputs.VERSION }}/xmap-${{ steps.version.outputs.VERSION }}-darwin-amd64.tar.gz)
+          - [xmap-${{ steps.version.outputs.VERSION }}-darwin-arm64.tar.gz](https://github.com/tongchengbin/xmap/releases/download/${{ steps.version.outputs.VERSION }}/xmap-${{ steps.version.outputs.VERSION }}-darwin-arm64.tar.gz)
+          
+          **Windows:**
+          - [xmap-${{ steps.version.outputs.VERSION }}-windows-amd64.zip](https://github.com/tongchengbin/xmap/releases/download/${{ steps.version.outputs.VERSION }}/xmap-${{ steps.version.outputs.VERSION }}-windows-amd64.zip)
+          - [xmap-${{ steps.version.outputs.VERSION }}-windows-arm64.zip](https://github.com/tongchengbin/xmap/releases/download/${{ steps.version.outputs.VERSION }}/xmap-${{ steps.version.outputs.VERSION }}-windows-arm64.zip)
+          
+          ### 🔍 校验和
+          - [checksums.txt](https://github.com/tongchengbin/xmap/releases/download/${{ steps.version.outputs.VERSION }}/checksums.txt)
+          
+          ### 📋 安装方法
+          
+          **使用 go install:**
+          ```bash
+          go install github.com/tongchengbin/xmap@${{ steps.version.outputs.VERSION }}
+          ```
+          
+          **手动安装:**
+          1. 下载对应平台的压缩包
+          2. 解压到你的 PATH 目录
+          3. 运行 `xmap -h` 验证安装
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
