@@ -78,6 +78,8 @@ func (x *XMap) Scan(ctx context.Context, target *types.ScanTarget) (*types.ScanR
 		webResult, err := x.webScanner.ScanWithContext(ctx, url)
 		result.Service = target.Scheme
 		x.enrichResultWithWebData(result, webResult)
+		// 完成扫描,计算耗时
+		result.Complete(err)
 		return result, err
 	}
 	result, err := x.serviceScanner.ScanWithContext(ctx, target)
@@ -138,6 +140,7 @@ func (x *XMap) enrichResultWithWebData(result *types.ScanResult, webResult *web.
 		// 如果有HTTP响应体，添加到Metadata
 		if webResult.Banner.Body != "" {
 			result.Banner["body"] = webResult.Banner.Body
+			result.Banner["body_length"] = len(webResult.Banner.Body)
 		}
 		if webResult.Banner.IconBytes != nil {
 			result.Banner["icon"] = base64.StdEncoding.EncodeToString(webResult.Banner.IconBytes)
